@@ -49,7 +49,7 @@ export function mountCoinChart(canvas, opts = {}) {
   let raw = [];               // OHLCV backfill from geckoterminal (rate-limited, best-effort)
   let ownBuckets = new Map(); // candles we build ourselves from live DexScreener prices
   const STEP = 300;           // 5-minute candles
-  const MAX_BARS = 48;        // 48 x 5m = 4 hours
+  const MAX_BARS = 32;        // 32 x 5m ≈ 2.7h — fewer, wider, cleaner
 
   // Our own candles are the reliable source: geckoterminal 429s easily and a
   // fresh pump.fun pool often has no OHLCV yet. Each price sample updates the
@@ -146,16 +146,15 @@ export function mountCoinChart(canvas, opts = {}) {
     const chg = live && px ? px.m5 : (lastK.c >= ks[0].o ? 1 : -1);
 
     // header
-    ctx.font = "600 32px 'SF Mono', Menlo, monospace";
+    ctx.font = "600 34px 'SF Mono', Menlo, monospace";
     ctx.textBaseline = "middle"; ctx.textAlign = "left";
     ctx.fillStyle = THEME.header;
-    ctx.fillText("$" + sym + (live ? "  5m" : " · simulation"), 26, 38);
+    ctx.fillText("$" + sym + (live ? "  5m" : " · sim"), 24, 40);
     ctx.textAlign = "right";
     ctx.fillStyle = chg >= 0 ? THEME.up : THEME.down;
-    ctx.fillText(fmtPrice(lastPx), W - 26, 38);
+    ctx.fillText(fmtPrice(lastPx), W - 24, 40);
 
-    const top = 74, bot = H - 96, left = 92, right = W - 26;
-    const volTop = H - 84, volBot = H - 52;
+    const top = 88, bot = H - 78, left = 158, right = W - 24;
 
     let lo = Math.min(...ks.map(k => k.l), lastPx);
     let hi = Math.max(...ks.map(k => k.h), lastPx);
@@ -165,32 +164,25 @@ export function mountCoinChart(canvas, opts = {}) {
     if (!(hi - lo > minSpan)) { hi = mid + minSpan / 2; lo = mid - minSpan / 2; }
     const pad = (hi - lo) * 0.14; hi += pad; lo -= pad;
     const Y = v => bot - (v - lo) / (hi - lo) * (bot - top);
-    const maxV = Math.max(1, ...ks.map(k => k.v || 0));
 
     // grid + price axis
     ctx.lineWidth = 1; ctx.strokeStyle = THEME.grid;
-    ctx.font = "500 15px 'SF Mono', Menlo, monospace"; ctx.fillStyle = THEME.label;
-    for (let i = 0; i <= 4; i++) {
-      const y = top + (bot - top) * i / 4;
+    ctx.font = "500 16px 'SF Mono', Menlo, monospace"; ctx.fillStyle = THEME.label;
+    for (let i = 0; i <= 2; i++) {
+      const y = top + (bot - top) * i / 2;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
       ctx.textAlign = "right";
-      ctx.fillText((hi - (hi - lo) * i / 4).toPrecision(3), left - 8, y);
+      ctx.fillText((hi - (hi - lo) * i / 2).toPrecision(3), left - 10, y);
     }
 
     // candles
     const n = ks.length;
     const slot = (right - left) / n;
-    const bw = Math.max(4, Math.min(22, slot * 0.7));
+    const bw = Math.max(5, Math.min(20, slot * 0.62));
     ks.forEach((k, i) => {
       const x = left + slot * i + slot / 2;
       const up = k.c >= k.o;
       const col = up ? THEME.up : THEME.down;
-      // volume bar
-      if (k.v > 0) {
-        ctx.fillStyle = up ? "rgba(46,158,107,.18)" : "rgba(217,80,63,.18)";
-        const vh = (k.v / maxV) * (volBot - volTop);
-        ctx.fillRect(x - bw / 2, volBot - vh, bw, vh);
-      }
       // wick (real trades only)
       if (!k.filled) {
         ctx.strokeStyle = col;
@@ -216,19 +208,19 @@ export function mountCoinChart(canvas, opts = {}) {
     ctx.beginPath(); ctx.moveTo(left, ly); ctx.lineTo(right, ly); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = THEME.cross;
-    ctx.fillRect(2, ly - 12, 86, 24);
-    ctx.fillStyle = "#fff"; ctx.font = "600 13px 'SF Mono', Menlo, monospace";
+    ctx.fillRect(6, ly - 13, 132, 26);
+    ctx.fillStyle = "#fff"; ctx.font = "600 15px 'SF Mono', Menlo, monospace";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(fmtPrice(lastPx).slice(0, 11), 45, ly);
+    ctx.fillText(fmtPrice(lastPx).slice(0, 12), 72, ly);
 
     // footer
-    ctx.font = "500 19px 'SF Mono', Menlo, monospace"; ctx.textAlign = "left"; ctx.fillStyle = THEME.dim;
+    ctx.font = "500 18px 'SF Mono', Menlo, monospace"; ctx.textAlign = "left"; ctx.fillStyle = THEME.dim;
     ctx.fillText(
       live && px ? `5m ${px.m5 >= 0 ? "+" : ""}${px.m5.toFixed(1)}%   24h ${px.h24 >= 0 ? "+" : ""}${px.h24.toFixed(1)}%   mc ${fmtUsd(px.mcap)}`
                  : "practice chart — real candles at launch",
-      26, H - 22);
+      24, H - 20);
     ctx.textAlign = "right";
-    ctx.fillText(live ? "live · geckoterminal" : "live · fablebot is watching", W - 26, H - 22);
+    ctx.fillText(live ? "live" : "pre-launch", W - 24, H - 20);
   }
 
   pollMarket(); draw();

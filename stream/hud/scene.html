@@ -17,13 +17,13 @@
     radial-gradient(120% 90% at 50% 8%, #f7f5ee 0%, #efece3 55%, #e9e5d8 100%);
     color:var(--ink);font-family:var(--font)}
 
-  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:302px;
+  .chartCard{position:absolute;left:30px;top:96px;width:452px;height:306px;
     background:var(--card);border:1px solid var(--line);border-radius:22px;padding:6px;
     box-shadow:0 14px 44px rgba(32,20,13,.06)}
   .chartCard canvas{width:100%;height:100%;display:block}
 
   /* field notes: every thought, tool call and spoken line, as it happens */
-  .mind{position:absolute;left:30px;top:410px;width:640px;height:186px;
+  .mind{position:absolute;left:30px;top:414px;width:452px;height:182px;
     background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;
     overflow:hidden;display:flex;flex-direction:column}
   .mind .hd{display:flex;align-items:center;gap:8px;margin-bottom:9px}
@@ -78,13 +78,13 @@
   .join .t1{font-size:13px;color:#eaf5ef;font-weight:600;line-height:1.25}
   .join .t2{font-family:var(--mono);font-size:11px;color:#7fd8ab;margin-top:3px;overflow-wrap:anywhere}
 
-  .cap{position:absolute;left:30px;right:390px;bottom:112px;z-index:4;background:rgba(28,24,21,.94);color:#f6f2ea;
+  .cap{position:absolute;left:30px;right:376px;bottom:34px;z-index:4;background:rgba(28,24,21,.94);color:#f6f2ea;
     padding:18px 22px;border-radius:18px;font-size:20px;line-height:1.4;min-height:26px;
     opacity:0;transform:translateY(10px);transition:.28s;box-shadow:0 10px 40px rgba(28,24,21,.18)}
   .cap.show{opacity:1;transform:none}
   .cap .who{font-family:var(--mono);font-size:12px;color:var(--orange);letter-spacing:.08em;display:block;margin-bottom:5px}
 
-  .foot{position:absolute;left:30px;bottom:34px;z-index:4;display:flex;gap:26px;align-items:center;
+  .foot{position:absolute;left:30px;bottom:120px;z-index:4;display:flex;gap:26px;align-items:center;
     background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 22px}
   .stat .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
   .stat .v{font-size:20px;margin-top:2px}
@@ -100,9 +100,10 @@
 </script>
 </head>
 <body>
-<div class="chartCard"><canvas id="chart" width="1280" height="604"></canvas></div>
+<div class="chartCard"><canvas id="chart" width="904" height="612"></canvas>
+  <iframe id="chartEmbed" style="display:none;width:100%;height:100%;border:0;border-radius:16px" allow="clipboard-write"></iframe></div>
 <div class="mind">
-  <div class="hd"><span class="dot"></span><b>field notes — every thought, tool call &amp; spoken line</b></div>
+  <div class="hd"><span class="dot"></span><b>field notes — live</b></div>
   <div class="lines" id="mindlines"></div>
 </div>
 <div id="stage"><canvas id="bot"></canvas></div>
@@ -147,12 +148,27 @@ const $ = s => document.querySelector(s);
 const esc = x => String(x || "").replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
 async function j(u) { try { return await (await fetch(u, { cache: "no-store" })).json(); } catch { return null; } }
 
-mountCoinChart(document.getElementById("chart"), {
-  getCoin: async () => {
-    const s = await j("/api/state");
-    return s?.coin ? { mint: s.coin.mint, symbol: s.coin.symbol } : null;
-  },
-});
+// Chart: our own canvas by default. `?chart=embed` swaps in GeckoTerminal's
+// TradingView widget instead — try it in OBS; it renders blank in some embedded
+// browsers, which is why it isn't the default.
+const useEmbed = new URLSearchParams(location.search).get("chart") === "embed";
+if (useEmbed) {
+  (async () => {
+    const d = await j("/api/ohlcv");
+    if (!d?.pair) return;
+    const f = $("#chartEmbed");
+    f.src = `https://www.geckoterminal.com/solana/pools/${d.pair}?embed=1&info=0&swaps=0&light_chart=1&resolution=5m`;
+    f.style.display = "block";
+    $("#chart").style.display = "none";
+  })();
+} else {
+  mountCoinChart(document.getElementById("chart"), {
+    getCoin: async () => {
+      const s = await j("/api/state");
+      return s?.coin ? { mint: s.coin.mint, symbol: s.coin.symbol } : null;
+    },
+  });
+}
 
 // ---------- chat panel (backend events + pump.fun poller file) ----------
 const chatBox = $("#chatlist");
