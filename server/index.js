@@ -18,6 +18,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 load();
 loadMemory();
 
+// Rehydrate the launched coin from COIN_MINT so the server never "forgets" it
+// across ephemeral restarts/deploys (its state disk is not persisted).
+if (!state.coin && process.env.COIN_MINT) {
+  const mint = process.env.COIN_MINT.trim();
+  state.coin = {
+    mint, symbol: process.env.LAUNCH_SYMBOL || "TEST", name: process.env.LAUNCH_NAME || "test",
+    url: `https://pump.fun/coin/${mint}`, ts: Date.now(), rehydrated: true,
+  };
+  pushEvent("info", `coin rehydrated from COIN_MINT: ${mint}`);
+}
+
 const PORT = Number(process.env.PORT || 8947);
 const ENABLED = process.env.ENABLED !== "false";           // master run switch (agent acts)
 const TICK_MS = Number(process.env.TICK_MINUTES || 3) * 60 * 1000;
