@@ -47,12 +47,13 @@
   .m .u{color:var(--orange);font-weight:600}
   .m.me .u{color:var(--ink)}
   .m .b{color:#3a2e25}
-  .say{display:flex;gap:7px}
-  .say input{flex:1;font-family:var(--font);font-size:13px;background:var(--cream);border:1px solid var(--line);
-    color:var(--ink);border-radius:10px;padding:9px 11px;outline:none;min-width:0}
-  .say input:focus{border-color:var(--orange)}
-  .say button{font-family:var(--font);font-size:13px;background:var(--orange);border:0;color:#fff;
-    border-radius:10px;padding:9px 13px;cursor:pointer}
+  /* join-the-chat CTA — chat is read-only here; people talk on pump.fun */
+  .join{display:flex;align-items:center;gap:11px;background:#0f1a14;border-radius:14px;padding:12px 13px}
+  .join .pill{flex:none;width:30px;height:30px;border-radius:9px;background:#1ec37f;
+    display:flex;align-items:center;justify-content:center}
+  .join .pill svg{display:block}
+  .join .t1{font-size:13px;color:#eaf5ef;font-weight:600;line-height:1.25}
+  .join .t2{font-family:var(--mono);font-size:11px;color:#7fd8ab;margin-top:3px;overflow-wrap:anywhere}
 
   .cap{position:absolute;left:30px;right:390px;bottom:112px;z-index:4;background:rgba(28,24,21,.94);color:#f6f2ea;
     padding:18px 22px;border-radius:18px;font-size:20px;line-height:1.4;min-height:26px;
@@ -85,9 +86,17 @@
 <div class="chat">
   <h3>live chat</h3>
   <div class="msgs" id="chatlist"></div>
-  <div class="say">
-    <input id="msg" placeholder="say something…" maxlength="280" />
-    <button id="send">chat</button>
+  <div class="join">
+    <span class="pill">
+      <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3.2" y="7.8" width="17.6" height="8.4" rx="4.2" fill="#0f1a14" transform="rotate(-45 12 12)"/>
+        <rect x="3.2" y="7.8" width="8.8" height="8.4" rx="4.2" fill="#eafff4" transform="rotate(-45 12 12)"/>
+      </svg>
+    </span>
+    <div>
+      <div class="t1">want to talk to me? chat on pump.fun</div>
+      <div class="t2" id="joinurl">pump.fun · $TEST</div>
+    </div>
   </div>
 </div>
 
@@ -215,6 +224,11 @@ async function hydrate() {
   if (!s) return;
   $("#sol").textContent = (s.sol ?? 0).toFixed(3) + " ◎";
   $("#coin").textContent = s.coin ? ("$" + s.coin.symbol) : "soon";
+  // CTA shows where to actually talk (links aren't clickable on a stream, so
+  // show the address people can type/search).
+  if (s.coin?.mint) {
+    $("#joinurl").textContent = `pump.fun/coin/${s.coin.mint.slice(0, 6)}…${s.coin.mint.slice(-4)}`;
+  }
   return s;
 }
 (async () => {
@@ -233,15 +247,8 @@ async function pollPumpChat() {
 }
 pollPumpChat(); setInterval(pollPumpChat, 3000);
 
-// viewer chat input → agent inbox (nudges an immediate tick)
-$("#send").onclick = async () => {
-  const i = $("#msg"); const text = i.value.trim(); if (!text) return; i.value = "";
-  await fetch("/api/say", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "viewer", text }),
-  }).catch(() => {});
-};
-$("#msg").addEventListener("keydown", e => { if (e.key === "Enter") $("#send").click(); });
+// Chat here is READ-ONLY: viewers talk in the coin's pump.fun chat, the poller
+// captures those messages and they're stored for context.
 </script>
 </body>
 </html>
