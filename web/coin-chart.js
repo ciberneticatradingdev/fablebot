@@ -117,15 +117,13 @@ export function mountCoinChart(canvas, opts = {}) {
     } catch {}
   }
   async function pollOhlcv() {
-    if (!pairAddr) return;
+    if (!coin?.mint) return;
     try {
-      const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddr}/ohlcv/minute?aggregate=1&limit=200`);
+      // via our backend: geckoterminal has no CORS and rate-limits per IP
+      const r = await fetch(`/api/ohlcv?mint=${coin.mint}&aggregate=1`);
       if (!r.ok) throw 0;
       const j = await r.json();
-      const list = j?.data?.attributes?.ohlcv_list;
-      if (Array.isArray(list) && list.length) {
-        raw = list.map(c => ({ t: c[0], o: +c[1], h: +c[2], l: +c[3], c: +c[4], v: +c[5] || 0 })).sort((a, b) => a.t - b.t);
-      }
+      if (Array.isArray(j.candles) && j.candles.length) raw = j.candles;
     } catch {}
   }
 
@@ -224,7 +222,7 @@ export function mountCoinChart(canvas, opts = {}) {
   pollMarket(); draw();
   const timers = [
     setInterval(pollMarket, 8000),
-    setInterval(pollOhlcv, 120000),   // backfill only; rate-limited upstream
+    setInterval(pollOhlcv, 45000),   // server-cached, so this is cheap
     setInterval(() => { if (!(coin?.mint)) demoStep(); draw(); }, 4000),
     setInterval(draw, 1000),
   ];

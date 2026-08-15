@@ -122,6 +122,45 @@ app.get("/", (req, res, next) => {
   }
   next();
 });
+// ---- OHLCV proxy: real candles for the HUD chart ----
+// Browsers can't call geckoterminal directly (no CORS) and it rate-limits hard,
+// so the server fetches once and caches for everyone watching.
+const ohlcvCache = { at: 0, pair: null, data: null, mint: null };
+app.get("/api/ohlcv", async (req, res) => {
+  const mint = String(req.query.mint || state.coin?.mint || "").trim();
+  if (!mint) return res.json({ candles: [] });
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  if (ohlcvCache.mint === mint && Date.now() - ohlcvCache.at < 45000) {
+    return res.json({ candles: ohlcvCache.data || [], cached: true, pair: ohlcvCache.pair });
+  }
+  try {
+    if (ohlcvCache.mint !== mint || !ohlcvCache.pair) {
+      const dr = await fetch("https://api.dexscreener.com/latest/dex/tokens/" + mint, { signal: AbortSignal.timeout(8000) });
+      const dj = await dr.json();
+      const pairs = (dj.pairs || []).filter(p => p.chainId === "solana")
+        .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+      ohlcvCache.pair = pairs[0]?.pairAddress || null;
+      ohlcvCache.mint = mint;
+    }
+    if (!ohlcvCache.pair) return res.json({ candles: [] });
+    const agg = String(req.query.aggregate || "1");
+    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${ohlcvCache.pair}/ohlcv/minute?aggregate=${agg}&limit=200`, {
+      headers: { Accept: "application/json;version=20230302" }, signal: AbortSignal.timeout(10000),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const list = j?.data?.attributes?.ohlcv_list;
+      if (Array.isArray(list)) {
+        ohlcvCache.data = list.map(c => ({ t: c[0], o: +c[1], h: +c[2], l: +c[3], c: +c[4], v: +c[5] || 0 })).sort((a, b) => a.t - b.t);
+        ohlcvCache.at = Date.now();
+      }
+    }
+    res.json({ candles: ohlcvCache.data || [], pair: ohlcvCache.pair, status: r.status });
+  } catch (e) {
+    res.json({ candles: ohlcvCache.data || [], error: e.message });
+  }
+});
+
 // ---- ask-my-human channel ----
 app.get("/api/questions", (_req, res) => {
   res.json({ questions: state.questions.slice(-20).reverse() });
