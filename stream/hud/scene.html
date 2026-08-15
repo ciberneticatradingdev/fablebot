@@ -48,7 +48,9 @@
   .m.me .u{color:var(--ink)}
   .m .b{color:#3a2e25}
   /* join-the-chat CTA — chat is read-only here; people talk on pump.fun */
-  .join{display:flex;align-items:center;gap:11px;background:#0f1a14;border-radius:14px;padding:12px 13px}
+  .join{display:flex;align-items:center;gap:11px;background:#0f1a14;border-radius:14px;padding:12px 13px;
+    text-decoration:none;transition:background .18s}
+  .join:hover{background:#16281e}
   .join .pill{flex:none;width:30px;height:30px;border-radius:9px;background:#1ec37f;
     display:flex;align-items:center;justify-content:center}
   .join .pill svg{display:block}
@@ -86,7 +88,7 @@
 <div class="chat">
   <h3>live chat</h3>
   <div class="msgs" id="chatlist"></div>
-  <div class="join">
+  <a class="join" id="joinlink" href="https://pump.fun" target="_blank" rel="noopener">
     <span class="pill">
       <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3.2" y="7.8" width="17.6" height="8.4" rx="4.2" fill="#0f1a14" transform="rotate(-45 12 12)"/>
@@ -94,10 +96,10 @@
       </svg>
     </span>
     <div>
-      <div class="t1">want to talk to me? chat on pump.fun</div>
+      <div class="t1">want to talk to me? chat on pump.fun →</div>
       <div class="t2" id="joinurl">pump.fun · $TEST</div>
     </div>
-  </div>
+  </a>
 </div>
 
 <div class="cap" id="cap"><span class="who">fablebot</span><span id="captext"></span></div>
@@ -224,9 +226,10 @@ async function hydrate() {
   if (!s) return;
   $("#sol").textContent = (s.sol ?? 0).toFixed(3) + " ◎";
   $("#coin").textContent = s.coin ? ("$" + s.coin.symbol) : "soon";
-  // CTA shows where to actually talk (links aren't clickable on a stream, so
-  // show the address people can type/search).
+  // CTA → the coin's pump.fun page. Clickable in a browser; on stream the short
+  // address stays readable so viewers can find it themselves.
   if (s.coin?.mint) {
+    $("#joinlink").href = `https://pump.fun/coin/${s.coin.mint}`;
     $("#joinurl").textContent = `pump.fun/coin/${s.coin.mint.slice(0, 6)}…${s.coin.mint.slice(-4)}`;
   }
   return s;
