@@ -21,6 +21,8 @@ const THEME = {
 const fmtUsd = v => v >= 1e9 ? "$" + (v / 1e9).toFixed(2) + "b" : v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "m" : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "k" : "$" + (+v).toFixed(2);
 const fmtPrice = v => "$" + (+v).toPrecision(3);
 
+const lastKprice = ks => (ks.length ? ks[ks.length - 1].c : 1);
+
 // Bucket raw OHLCV into a continuous series, forward-filling empty periods.
 function densify(raw, stepSec, maxBars, nowSec) {
   if (!raw.length) return [];
@@ -46,7 +48,7 @@ export function mountCoinChart(canvas, opts = {}) {
   let raw = [];               // OHLCV backfill from geckoterminal (rate-limited, best-effort)
   let ownBuckets = new Map(); // candles we build ourselves from live DexScreener prices
   const STEP = 60;            // 1-minute candles
-  const MAX_BARS = 64;
+  const MAX_BARS = 44;
 
   // Our own candles are the reliable source: geckoterminal 429s easily and a
   // fresh pump.fun pool often has no OHLCV yet. Each price sample updates the
@@ -156,8 +158,11 @@ export function mountCoinChart(canvas, opts = {}) {
 
     let lo = Math.min(...ks.map(k => k.l));
     let hi = Math.max(...ks.map(k => k.h));
-    if (!(hi > lo)) { hi = lo * 1.02 + 1e-12; lo = lo * 0.98; }
-    const pad = (hi - lo) * 0.12; hi += pad; lo -= pad;
+    // flat/quiet market: keep a sane band so candles sit mid-chart, not on a hairline
+    const mid = (hi + lo) / 2 || lastKprice(ks);
+    const minSpan = mid * 0.02;
+    if (!(hi - lo > minSpan)) { hi = mid + minSpan / 2; lo = mid - minSpan / 2; }
+    const pad = (hi - lo) * 0.14; hi += pad; lo -= pad;
     const Y = v => bot - (v - lo) / (hi - lo) * (bot - top);
     const maxV = Math.max(1, ...ks.map(k => k.v || 0));
 
@@ -174,7 +179,7 @@ export function mountCoinChart(canvas, opts = {}) {
     // candles
     const n = ks.length;
     const slot = (right - left) / n;
-    const bw = Math.max(3, Math.min(18, slot * 0.68));
+    const bw = Math.max(4, Math.min(22, slot * 0.7));
     ks.forEach((k, i) => {
       const x = left + slot * i + slot / 2;
       const up = k.c >= k.o;
@@ -193,7 +198,7 @@ export function mountCoinChart(canvas, opts = {}) {
       const yo = Y(k.o), yc = Y(k.c);
       const bodyH = Math.max(k.filled ? 1.5 : 2.5, Math.abs(yc - yo));
       ctx.fillStyle = up ? THEME.upFill : THEME.downFill;
-      if (k.filled) ctx.globalAlpha = 0.42;
+      if (k.filled) ctx.globalAlpha = 0.5;
       ctx.fillRect(x - bw / 2, Math.min(yo, yc), bw, bodyH);
       ctx.globalAlpha = 1;
     });

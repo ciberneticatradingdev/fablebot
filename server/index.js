@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { state, load, pushEvent, sseClients, spentToday, save } from "./lib/state.js";
 import { loadMemory, memory, maybeConsolidate } from "./lib/memory.js";
+import { hasDb, dbLoadEventsByType } from "./lib/db.js";
 import { runTick, anthropic, isDemo as brainDemo } from "./lib/brain.js";
 import { launchCoin } from "./lib/pump.js";
 import * as walletLib from "./lib/wallet.js";
@@ -122,6 +123,17 @@ app.get("/", (req, res, next) => {
   }
   next();
 });
+// ---- chat history ----
+// Straight from the DB so the HUD's chat panel repopulates after any restart
+// (the in-memory event ring is mostly think/act/tool, so chat scrolls out of it).
+app.get("/api/chat", async (req, res) => {
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 30));
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  let evs = hasDb ? await dbLoadEventsByType("chat", limit) : null;
+  if (!evs) evs = state.events.filter(e => e.type === "chat").slice(-limit);
+  res.json({ messages: evs.map(e => ({ ts: e.ts, text: e.text, source: e.source || null })) });
+});
+
 // ---- OHLCV proxy: real candles for the HUD chart ----
 // Browsers can't call geckoterminal directly (no CORS) and it rate-limits hard,
 // so the server fetches once and caches for everyone watching.

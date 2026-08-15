@@ -57,6 +57,19 @@ export async function dbLoadEvents(limit = 400) {
     return r.rows.reverse().map((e) => ({ ...e, id: Number(e.id), ts: Number(e.ts), ...(e.meta || {}), meta: undefined }));
   } catch (e) { console.error("[db] loadEvents:", e.message); return null; }
 }
+// Pull the last N events of one type straight from the DB — the in-memory ring
+// is dominated by think/act/tool, so chat history falls out of it fast.
+export async function dbLoadEventsByType(type, limit = 30) {
+  if (!pool) return null;
+  try {
+    const r = await pool.query(
+      `SELECT id, ts, type, text, meta FROM events WHERE type = $1 ORDER BY id DESC LIMIT $2`,
+      [type, limit]
+    );
+    return r.rows.reverse().map((e) => ({ ...e, id: Number(e.id), ts: Number(e.ts), ...(e.meta || {}), meta: undefined }));
+  } catch (e) { console.error("[db] loadByType:", e.message); return null; }
+}
+
 export async function dbMaxEventId() {
   if (!pool) return 0;
   try { const r = await pool.query(`SELECT COALESCE(MAX(id),0) AS m FROM events`); return Number(r.rows[0].m); }

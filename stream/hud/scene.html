@@ -17,13 +17,13 @@
     radial-gradient(120% 90% at 50% 8%, #f7f5ee 0%, #efece3 55%, #e9e5d8 100%);
     color:var(--ink);font-family:var(--font)}
 
-  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:250px;
+  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:302px;
     background:var(--card);border:1px solid var(--line);border-radius:22px;padding:6px;
     box-shadow:0 14px 44px rgba(32,20,13,.06)}
   .chartCard canvas{width:100%;height:100%;display:block}
 
   /* field notes: every thought, tool call and spoken line, as it happens */
-  .mind{position:absolute;left:30px;top:358px;width:640px;height:252px;
+  .mind{position:absolute;left:30px;top:410px;width:640px;height:186px;
     background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;
     overflow:hidden;display:flex;flex-direction:column}
   .mind .hd{display:flex;align-items:center;gap:8px;margin-bottom:9px}
@@ -100,7 +100,7 @@
 </script>
 </head>
 <body>
-<div class="chartCard"><canvas id="chart" width="1256" height="490"></canvas></div>
+<div class="chartCard"><canvas id="chart" width="1280" height="604"></canvas></div>
 <div class="mind">
   <div class="hd"><span class="dot"></span><b>field notes — every thought, tool call &amp; spoken line</b></div>
   <div class="lines" id="mindlines"></div>
@@ -256,7 +256,7 @@ function pushMind(kind, text) {
   el.className = "ml fresh ev-" + kind;
   el.innerHTML = `<span class="k">${esc(kind)}</span><span class="v">${esc(text)}</span>`;
   mindBox.appendChild(el);
-  while (mindBox.children.length > 7) mindBox.removeChild(mindBox.firstChild);
+  while (mindBox.children.length > 4) mindBox.removeChild(mindBox.firstChild);
   setTimeout(() => el.classList.remove("fresh"), 600);
 }
 // The full field-notes feed: everything it thinks, calls and says.
@@ -301,7 +301,9 @@ async function hydrate() {
 }
 (async () => {
   const s = await hydrate();
-  for (const e of (s?.events || []).slice(-40)) if (e.type === "chat") chatFromEvent(e.text);
+  // chat history from the DB (survives restarts; the event ring alone loses it)
+  const hist = await j("/api/chat?limit=25");
+  for (const m of (hist?.messages || [])) chatFromEvent(m.text);
   for (const e of (s?.events || []).slice(-20)) mindFromEvent(e); // seed the feed
   const es = new EventSource("/api/feed");
   es.onmessage = ev => { try { handleEvent(JSON.parse(ev.data)); } catch {} };
