@@ -1,50 +1,45 @@
-// coin-chart.js — the jumbotron chart behind fablebot (ported from fablecat's
-// "the number" screen, restyled to the clay/cream palette).
-// Real mode: DexScreener price poll + GeckoTerminal 5m OHLCV candles.
-// Demo mode (no coin yet): a live random-walk simulation so the stream looks alive.
+// coin-chart.js — the price chart behind fablebot (clay/cream themed).
+// Real data: DexScreener price + GeckoTerminal 5m OHLCV candles for the coin.
+// Renders a clean area + price line (looks like a normal chart with any number of
+// points), with thin candlesticks overlaid once there's enough history. Before the
+// coin exists it shows a subtle simulated line so the stream isn't empty.
 //   mountCoinChart(canvas, { getCoin: async () => ({mint, symbol}) | null })
 
 const THEME = {
   header: "#8a7a6d",
-  price: "#20140d",
-  grid: "#e5ddd0",
+  grid: "#e7e0d3",
   label: "#b3a897",
   up: "#2e9e6b",
   down: "#d9503f",
+  line: "#d9663f",
+  fillTop: "rgba(217,102,63,0.22)",
+  fillBot: "rgba(217,102,63,0.0)",
   dim: "#b3a897",
 };
 
 const fmtUsd = v => v >= 1e9 ? "$" + (v / 1e9).toFixed(2) + "b" : v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "m" : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "k" : "$" + (+v).toFixed(2);
-const fmtPrice = v => "$" + (+v).toPrecision(3);
+const fmtPrice = v => v >= 1 ? "$" + (+v).toFixed(3) : "$" + (+v).toPrecision(3);
 
 export function mountCoinChart(canvas, opts = {}) {
   const ctx = canvas.getContext("2d");
   const getCoin = opts.getCoin || (async () => null);
 
-  let coin = null;          // { mint, symbol }
-  let px = null;            // { usd, m5, h24, mcap }
-  let candles = null;       // [{t,o,h,l,c}]
+  let coin = null;
+  let px = null;                 // { usd, m5, h24, mcap }
+  let candles = null;            // [{t,o,h,l,c}]
   let pairAddr = null;
   const sessionPrices = [];
 
-  // ---- demo random walk (pre-launch) ----
-  let demoCandles = [];
-  let demoPrice = 0.000042;
+  // pre-launch simulated line
+  let demo = [];
+  let demoP = 0.000031;
   function demoStep() {
-    const o = demoPrice;
-    let c = o;
-    let h = o, l = o;
-    for (let i = 0; i < 6; i++) {
-      c *= 1 + (Math.random() - 0.485) * 0.02;
-      h = Math.max(h, c); l = Math.min(l, c);
-    }
-    demoPrice = c;
-    demoCandles.push({ o, h, l, c });
-    if (demoCandles.length > 48) demoCandles.shift();
+    demoP *= 1 + (Math.random() - 0.48) * 0.04;
+    demo.push(demoP);
+    if (demo.length > 80) demo.shift();
   }
-  for (let i = 0; i < 48; i++) demoStep();
+  for (let i = 0; i < 80; i++) demoStep();
 
-  // ---- real data ----
   async function pollMarket() {
     try { coin = (await getCoin()) || coin; } catch {}
     if (!coin?.mint) return;
@@ -56,20 +51,17 @@ export function mountCoinChart(canvas, opts = {}) {
       pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
       const p = pairs[0];
       const first = !px;
-      px = {
-        usd: +p.priceUsd, m5: +(p.priceChange?.m5 ?? 0), h24: +(p.priceChange?.h24 ?? 0),
-        mcap: p.marketCap || p.fdv || 0,
-      };
+      px = { usd: +p.priceUsd, m5: +(p.priceChange?.m5 ?? 0), h24: +(p.priceChange?.h24 ?? 0), mcap: p.marketCap || p.fdv || 0 };
       pairAddr = p.pairAddress;
       sessionPrices.push(px.usd);
-      if (sessionPrices.length > 120) sessionPrices.shift();
+      if (sessionPrices.length > 200) sessionPrices.shift();
       if (first) pollOhlcv();
     } catch {}
   }
   async function pollOhlcv() {
     if (!pairAddr) return;
     try {
-      const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddr}/ohlcv/minute?aggregate=5&limit=48`);
+      const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddr}/ohlcv/minute?aggregate=5&limit=96`);
       if (!r.ok) throw 0;
       const j = await r.json();
       const list = j?.data?.attributes?.ohlcv_list;
@@ -79,77 +71,97 @@ export function mountCoinChart(canvas, opts = {}) {
     } catch {}
   }
 
-  // ---- draw ----
   function draw() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
     const live = !!(coin?.mint && px);
-    const sym = live ? (coin.symbol || "FABLEBOT") : "FABLEBOT";
-    const ks = live ? (candles && candles.length > 1 ? candles : null) : demoCandles;
+    const sym = live ? (coin.symbol || "TEST") : "TEST";
+
+    // build the price series (real closes, else session, else demo)
+    let series, ohlc = null;
+    if (live && candles && candles.length) { ohlc = candles; series = candles.map(k => k.c); }
+    else if (live && sessionPrices.length) series = sessionPrices.slice();
+    else series = demo.slice();
+    // guarantee at least 2 points so a line renders
+    if (series.length === 1) series = [series[0], series[0]];
 
     // header
     ctx.font = "600 34px 'SF Mono', Menlo, monospace";
     ctx.textBaseline = "middle"; ctx.textAlign = "left";
     ctx.fillStyle = THEME.header;
     ctx.fillText("$" + sym + (live ? "" : " · simulation"), 26, 40);
-    const lastPx = live ? px.usd : demoPrice;
-    const lastChg = live ? px.m5 : (demoCandles.at(-1).c >= demoCandles.at(-1).o ? 1 : -1);
+    const last = live ? px.usd : demoP;
+    const chg = live ? px.m5 : 0;
     ctx.textAlign = "right";
-    ctx.fillStyle = lastChg >= 0 ? THEME.up : THEME.down;
-    ctx.fillText(fmtPrice(lastPx), W - 26, 40);
+    ctx.fillStyle = chg >= 0 ? THEME.up : THEME.down;
+    ctx.fillText(fmtPrice(last), W - 26, 40);
 
-    const top = 84, bot = H - 64, left = 22, right = W - 92;
-    let pts = null, lo = 0, hi = 0;
-    if (ks) { lo = Math.min(...ks.map(k => k.l)); hi = Math.max(...ks.map(k => k.h)); }
-    else if (sessionPrices.length > 1) { pts = sessionPrices; lo = Math.min(...pts); hi = Math.max(...pts); }
-    if (hi <= lo) hi = lo * 1.001 + 1e-12;
+    const top = 84, bot = H - 64, left = 22, right = W - 96;
+    let lo = Math.min(...series), hi = Math.max(...series);
+    if (ohlc) { lo = Math.min(...ohlc.map(k => k.l)); hi = Math.max(...ohlc.map(k => k.h)); }
+    if (hi <= lo) { const pad = (hi || 1) * 0.05 + 1e-12; lo -= pad; hi += pad; }
+    const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    const X = i => left + (right - left) * (series.length === 1 ? 0.5 : i / (series.length - 1));
     const Y = v => bot - (v - lo) / (hi - lo) * (bot - top);
 
-    // grid + axis labels
+    // gridlines + y labels
     ctx.lineWidth = 1.5; ctx.strokeStyle = THEME.grid;
+    ctx.font = "500 16px 'SF Mono', Menlo, monospace"; ctx.fillStyle = THEME.label; ctx.textAlign = "right";
     for (let i = 0; i <= 4; i++) {
       const y = top + (bot - top) * i / 4;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-      if (ks || pts) {
-        ctx.font = "500 16px 'SF Mono', Menlo, monospace";
-        ctx.fillStyle = THEME.label; ctx.textAlign = "right";
-        ctx.fillText((hi - (hi - lo) * i / 4).toPrecision(3), W - 8, y);
-      }
+      ctx.fillText(fmtPrice(hi - (hi - lo) * i / 4), W - 8, y);
     }
 
-    if (ks) {
-      const n = ks.length, cw = (right - left) / n;
-      ks.forEach((k, i) => {
-        const x = left + cw * i + cw / 2;
+    // area fill under the line
+    const grad = ctx.createLinearGradient(0, top, 0, bot);
+    grad.addColorStop(0, THEME.fillTop); grad.addColorStop(1, THEME.fillBot);
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(series[0]));
+    for (let i = 1; i < series.length; i++) ctx.lineTo(X(i), Y(series[i]));
+    ctx.lineTo(X(series.length - 1), bot); ctx.lineTo(X(0), bot); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    // price line
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(series[0]));
+    for (let i = 1; i < series.length; i++) ctx.lineTo(X(i), Y(series[i]));
+    ctx.strokeStyle = live ? THEME.line : THEME.dim;
+    ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.stroke();
+
+    // thin candlesticks overlaid once there's real history
+    if (ohlc && ohlc.length >= 6) {
+      const n = ohlc.length, slot = (right - left) / n, cw = Math.min(12, slot * 0.6);
+      ohlc.forEach((k, i) => {
+        const x = left + slot * i + slot / 2;
         const up = k.c >= k.o;
         ctx.strokeStyle = ctx.fillStyle = up ? THEME.up : THEME.down;
-        ctx.lineWidth = Math.max(1.5, cw * 0.1);
+        ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(x, Y(k.h)); ctx.lineTo(x, Y(k.l)); ctx.stroke();
         const yo = Y(k.o), yc = Y(k.c);
-        ctx.fillRect(x - cw * 0.3, Math.min(yo, yc), cw * 0.6, Math.max(2.5, Math.abs(yc - yo)));
+        ctx.fillRect(x - cw / 2, Math.min(yo, yc), cw, Math.max(2, Math.abs(yc - yo)));
       });
-    } else if (pts) {
-      ctx.strokeStyle = THEME.up; ctx.lineWidth = 4; ctx.lineJoin = "round"; ctx.beginPath();
-      pts.forEach((v, i) => { const x = left + (right - left) * i / (pts.length - 1); i ? ctx.lineTo(x, Y(v)) : ctx.moveTo(x, Y(v)); });
-      ctx.stroke();
     }
+
+    // current-price dot
+    ctx.beginPath();
+    ctx.arc(X(series.length - 1), Y(series[series.length - 1]), 4, 0, 7);
+    ctx.fillStyle = live ? THEME.line : THEME.dim; ctx.fill();
 
     // footer
     ctx.font = "500 20px 'SF Mono', Menlo, monospace"; ctx.textAlign = "left"; ctx.fillStyle = THEME.dim;
     ctx.fillText(
       live ? `5m ${px.m5 >= 0 ? "+" : ""}${px.m5.toFixed(1)}%   24h ${px.h24 >= 0 ? "+" : ""}${px.h24.toFixed(1)}%   mc ${fmtUsd(px.mcap)}`
-           : "practice chart — real one appears at launch",
+           : "waiting for the coin…",
       26, H - 30);
     ctx.textAlign = "right";
-    ctx.fillText("live · fablebot is watching", W - 26, H - 30);
+    ctx.fillText(live ? "live · fablebot is watching" : "practice chart", W - 26, H - 30);
   }
 
-  // ---- loops ----
   pollMarket(); draw();
   const t1 = setInterval(pollMarket, 8000);
-  const t2 = setInterval(pollOhlcv, 60000);
-  const t3 = setInterval(() => { if (!(coin?.mint && px)) demoStep(); draw(); }, 5000);
-  const t4 = setInterval(draw, 1000);
+  const t2 = setInterval(pollOhlcv, 30000);
+  const t3 = setInterval(() => { if (!(coin?.mint && px)) demoStep(); draw(); }, 3000);
 
-  return { stop: () => [t1, t2, t3, t4].forEach(clearInterval), draw };
+  return { stop: () => [t1, t2, t3].forEach(clearInterval), draw };
 }
