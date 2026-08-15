@@ -19,15 +19,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 await load();
 await loadMemory();
 
-// Rehydrate the launched coin from COIN_MINT so the server never "forgets" it
-// across ephemeral restarts/deploys (its state disk is not persisted).
-if (!state.coin && process.env.COIN_MINT) {
+// COIN_MINT is the source of truth for which coin is ours: it rehydrates the
+// coin after an ephemeral restart AND switches it if we point at a new one.
+if (process.env.COIN_MINT && state.coin?.mint !== process.env.COIN_MINT.trim()) {
   const mint = process.env.COIN_MINT.trim();
+  const prev = state.coin?.mint;
   state.coin = {
-    mint, symbol: process.env.LAUNCH_SYMBOL || "TEST", name: process.env.LAUNCH_NAME || "test",
-    url: `https://pump.fun/coin/${mint}`, ts: Date.now(), rehydrated: true,
+    mint,
+    symbol: process.env.LAUNCH_SYMBOL || "fablebot",
+    name: process.env.LAUNCH_NAME || "fablebot",
+    url: `https://pump.fun/coin/${mint}`, ts: Date.now(),
   };
-  pushEvent("info", `coin rehydrated from COIN_MINT: ${mint}`);
+  // Notes written before the real launch ("still not launched", "dry run",
+  // "demo mode") would actively mislead the agent about its own coin.
+  for (const [k, v] of Object.entries(state.notes)) {
+    if (/dry.?run|not launched|demo mode|fake|never promote/i.test(`${k} ${v}`)) delete state.notes[k];
+  }
+  save();
+  pushEvent("info", prev ? `coin switched ${prev} → ${mint}` : `coin set from COIN_MINT: ${mint}`);
 }
 
 const PORT = Number(process.env.PORT || 8947);

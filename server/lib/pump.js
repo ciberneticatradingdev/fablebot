@@ -95,7 +95,8 @@ export async function launchCoin({ name, symbol, description, imagePath, twitter
     if (process.env.LAUNCH_IMAGE) imagePath = process.env.LAUNCH_IMAGE;
     twitter = undefined; website = undefined;
   }
-  symbol = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, ONCHAIN_SYMBOL_MAX);
+  // case is preserved — pump.fun accepts lowercase tickers
+  symbol = String(symbol || "").replace(/[^A-Za-z0-9]/g, "").slice(0, ONCHAIN_SYMBOL_MAX);
   if (!name || symbol.length < 2) throw new Error("bad name/symbol");
   if (state.coin) throw new Error(`already launched ${state.coin.mint} — one coin per bot`);
 
