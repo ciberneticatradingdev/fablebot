@@ -137,7 +137,7 @@
       <span class="pill" id="p-run"><span class="d"></span>—</span>
     </div>
     <a class="navlink" href="#log">observation log</a>
-    <a class="navlink hot" href="/stream/hud/scene.html" target="_blank">watch live ↗</a>
+    <a class="navlink hot" href="/stream/hud/scene.html" target="_blank" data-stream>watch live ↗</a>
   </div>
 </header>
 
@@ -154,7 +154,7 @@
         We built the rails. It drives.
       </p>
       <div class="heroctas">
-        <a class="btn solid" href="/stream/hud/scene.html" target="_blank">watch the stream</a>
+        <a class="btn solid" href="/stream/hud/scene.html" target="_blank" data-stream>watch the stream</a>
         <a class="btn ghost" href="#experiment">read the protocol</a>
       </div>
     </div>
@@ -248,6 +248,7 @@
 import { mountScene } from "/fablebot-model.js";
 import { mountCoinChart } from "/coin-chart.js";
 import { API, STREAM_URL } from "/api-config.js";
+document.querySelectorAll("[data-stream]").forEach(a => a.href = STREAM_URL);
 
 document.querySelectorAll('a[href="/stream/hud/scene.html"]').forEach(a => { a.href = STREAM_URL; });
 

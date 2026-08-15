@@ -17,5 +17,7 @@ export const API = (() => {
   return BACKEND;
 })();
 
-// where "watch live" should send people (the HUD lives on the backend/rig host)
-export const STREAM_URL = "https://live.fablebot.fun";
+// where "watch live" should send people.
+// Once DNS for live.fablebot.fun is verified on Railway, switch to:
+//   export const STREAM_URL = "https://live.fablebot.fun";
+export const STREAM_URL = (BACKEND || "") + "/stream/hud/scene.html";
