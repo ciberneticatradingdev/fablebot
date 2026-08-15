@@ -32,6 +32,7 @@ function densify(raw, stepSec, maxBars, nowSec) {
   const start = Math.max(Math.floor(raw[0].t / stepSec) * stepSec, end - (maxBars - 1) * stepSec);
   const out = [];
   let last = raw[0].o;
+  for (const k of raw) if (Math.floor(k.t / stepSec) * stepSec <= start) last = k.c;
   for (let t = start; t <= end; t += stepSec) {
     const k = byBucket.get(t);
     if (k) { out.push({ ...k, t, filled: false }); last = k.c; }
@@ -47,8 +48,8 @@ export function mountCoinChart(canvas, opts = {}) {
   let coin = null, px = null, pairAddr = null;
   let raw = [];               // OHLCV backfill from geckoterminal (rate-limited, best-effort)
   let ownBuckets = new Map(); // candles we build ourselves from live DexScreener prices
-  const STEP = 60;            // 1-minute candles
-  const MAX_BARS = 44;
+  const STEP = 300;           // 5-minute candles
+  const MAX_BARS = 48;        // 48 x 5m = 4 hours
 
   // Our own candles are the reliable source: geckoterminal 429s easily and a
   // fresh pump.fun pool often has no OHLCV yet. Each price sample updates the
@@ -122,7 +123,7 @@ export function mountCoinChart(canvas, opts = {}) {
     if (!coin?.mint) return;
     try {
       // via our backend: geckoterminal has no CORS and rate-limits per IP
-      const r = await fetch(`/api/ohlcv?mint=${coin.mint}&aggregate=1`);
+      const r = await fetch(`/api/ohlcv?mint=${coin.mint}&aggregate=5`);
       if (!r.ok) throw 0;
       const j = await r.json();
       if (Array.isArray(j.candles) && j.candles.length) raw = j.candles;
@@ -148,7 +149,7 @@ export function mountCoinChart(canvas, opts = {}) {
     ctx.font = "600 32px 'SF Mono', Menlo, monospace";
     ctx.textBaseline = "middle"; ctx.textAlign = "left";
     ctx.fillStyle = THEME.header;
-    ctx.fillText("$" + sym + (live ? "  1m" : " · simulation"), 26, 38);
+    ctx.fillText("$" + sym + (live ? "  5m" : " · simulation"), 26, 38);
     ctx.textAlign = "right";
     ctx.fillStyle = chg >= 0 ? THEME.up : THEME.down;
     ctx.fillText(fmtPrice(lastPx), W - 26, 38);
@@ -156,8 +157,8 @@ export function mountCoinChart(canvas, opts = {}) {
     const top = 78, bot = H - 96, left = 22, right = W - 100;
     const volTop = H - 84, volBot = H - 52;
 
-    let lo = Math.min(...ks.map(k => k.l));
-    let hi = Math.max(...ks.map(k => k.h));
+    let lo = Math.min(...ks.map(k => k.l), lastPx);
+    let hi = Math.max(...ks.map(k => k.h), lastPx);
     // flat/quiet market: keep a sane band so candles sit mid-chart, not on a hairline
     const mid = (hi + lo) / 2 || lastKprice(ks);
     const minSpan = mid * 0.02;
