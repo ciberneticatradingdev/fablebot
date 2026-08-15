@@ -143,19 +143,10 @@ const btn = $("#audioBtn");
 // Real-audio TTS (works in OBS's embedded browser, which has NO speechSynthesis).
 // StreamElements returns an mp3 — no API key. speechSynthesis is only a fallback
 // for normal browsers if the audio fetch fails.
-// Google Translate TTS — real mp3, no key. ~200 chars/request, so long lines
-// are chunked at word boundaries and queued. Playback via <audio> needs no CORS.
-const ttsUrl = t => `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(t)}`;
-function chunkText(text, max = 190) {
-  const words = String(text).split(/\s+/);
-  const out = []; let cur = "";
-  for (const w of words) {
-    if ((cur + " " + w).trim().length > max) { if (cur) out.push(cur.trim()); cur = w; }
-    else cur += " " + w;
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out.length ? out : [String(text).slice(0, max)];
-}
+// Real-audio TTS via our backend proxy (/api/tts → Google mp3). Works in OBS's
+// embedded browser, which has no speechSynthesis. Same-origin, so no CORS/referer
+// issues; the server chunks long lines and returns one mp3.
+const ttsUrl = t => `/api/tts?text=${encodeURIComponent(t)}`;
 const player = new Audio();
 player.preload = "auto";
 let queue = [];
@@ -209,8 +200,8 @@ function speak(text) {
   const est = Math.min(9000, Math.max(2400, text.length * 60));
   showCap(text, est);
   if (!audioOn) { view.setSpeaking(true); setTimeout(() => view.setSpeaking(false), est); return; }
-  for (const c of chunkText(text)) queue.push(c);
-  if (queue.length > 8) queue = queue.slice(-8);
+  queue.push(text);
+  if (queue.length > 4) queue = queue.slice(-4);
   next();
 }
 

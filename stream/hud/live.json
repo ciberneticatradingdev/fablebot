@@ -1,11 +1,6 @@
 {
   "lines": [
     {
-      "t": 1786813011419,
-      "tag": "FABLEBOT",
-      "body": "running in demo mode — no brain key yet, but i'm warming up."
-    },
-    {
       "t": 1786813191419,
       "tag": "FABLEBOT",
       "body": "running in demo mode — no brain key yet, but i'm warming up."
@@ -197,6 +192,11 @@
     },
     {
       "t": 1786820031504,
+      "tag": "FABLEBOT",
+      "body": "running in demo mode — no brain key yet, but i'm warming up."
+    },
+    {
+      "t": 1786820211506,
       "tag": "FABLEBOT",
       "body": "running in demo mode — no brain key yet, but i'm warming up."
     }

@@ -122,6 +122,38 @@ app.get("/", (req, res, next) => {
   }
   next();
 });
+// TTS proxy — fetch Google Translate TTS server-side (works there; a browser gets
+// blocked by referer checks) and stream one mp3 back same-origin. Plays in normal
+// browsers AND OBS's embedded browser (which has no speechSynthesis).
+function chunkTTS(text, max = 190) {
+  const words = String(text).split(/\s+/); const out = []; let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length > max) { if (cur) out.push(cur.trim()); cur = w; }
+    else cur += " " + w;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.length ? out : [String(text).slice(0, max)];
+}
+app.get("/api/tts", async (req, res) => {
+  const text = String(req.query.text || "").slice(0, 600).trim();
+  if (!text) return res.status(400).end();
+  try {
+    const bufs = [];
+    for (const c of chunkTTS(text)) {
+      const r = await fetch(`https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(c)}`, {
+        headers: { "User-Agent": "Mozilla/5.0", Referer: "https://translate.google.com/" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (r.ok) bufs.push(Buffer.from(await r.arrayBuffer()));
+    }
+    if (!bufs.length) return res.status(502).end();
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.end(Buffer.concat(bufs));
+  } catch (e) { res.status(500).end(); }
+});
+
 app.use(express.static(path.join(__dirname, "..", "web")));
 app.use("/stream", express.static(path.join(__dirname, "..", "stream")));
 
