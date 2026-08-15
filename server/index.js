@@ -5,7 +5,7 @@ import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { state, load, pushEvent, sseClients, spentToday } from "./lib/state.js";
+import { state, load, pushEvent, sseClients, spentToday, save } from "./lib/state.js";
 import { loadMemory, memory, maybeConsolidate } from "./lib/memory.js";
 import { runTick, anthropic, isDemo as brainDemo } from "./lib/brain.js";
 import { launchCoin } from "./lib/pump.js";
@@ -122,6 +122,23 @@ app.get("/", (req, res, next) => {
   }
   next();
 });
+// ---- ask-my-human channel ----
+app.get("/api/questions", (_req, res) => {
+  res.json({ questions: state.questions.slice(-20).reverse() });
+});
+app.post("/api/answer", (req, res) => {
+  const id = Number(req.body?.id);
+  const answer = String(req.body?.answer || "").slice(0, 800).trim();
+  if (!answer) return res.status(400).json({ error: "empty answer" });
+  const q = state.questions.find(x => x.id === id) || state.questions.filter(x => !x.answer).slice(-1)[0];
+  if (!q) return res.status(404).json({ error: "no open question" });
+  q.answer = answer; q.answeredAt = Date.now(); q.relayed = false;
+  save();
+  pushEvent("ask", `✅ my human answered: ${answer}`, { questionId: q.id });
+  tickOnce("human-answer"); // wake it so it relays on stream promptly
+  res.json({ ok: true, id: q.id });
+});
+
 // TTS proxy — fetch Google Translate TTS server-side (works there; a browser gets
 // blocked by referer checks) and stream one mp3 back same-origin. Plays in normal
 // browsers AND OBS's embedded browser (which has no speechSynthesis).

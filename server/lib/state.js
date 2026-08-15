@@ -25,6 +25,7 @@ export const state = {
   lastTweetAt: 0,
   goals: [],           // bot-editable goal list
   notes: {},           // bot-editable key/value scratch memory
+  questions: [],       // { id, q, asker, ts, answer, answeredAt } — ask-my-human queue
 };
 
 // the state snapshot persisted to kv (everything except the events buffer)

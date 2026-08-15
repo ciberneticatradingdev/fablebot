@@ -94,6 +94,15 @@
   .ev.speak .ty{color:var(--ink)} .ev.tool .ty{color:#2f7d5b}
   .ev.tweet .ty{color:#3b7fd4} .ev.chat .ty{color:#b6853a}
   .ev.deploy .ty{color:#2f7d5b} .ev.error .ty{color:#c0442e}
+  .ev.ask .ty{color:var(--orange)}
+  .askq{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .askq:first-child{border-top:0}
+  .askq .who{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
+  .askq .q{font-size:13.5px;color:#3a2e25;margin:4px 0 8px;overflow-wrap:anywhere}
+  .askq .a{font-size:13px;color:#2f7d5b;overflow-wrap:anywhere}
+  .askq .say{margin-top:0}
+  .askq input{font-size:13px;padding:9px 11px}
+  .askq button{font-size:13px;padding:9px 13px}
   .ev .tx{color:#3a2e25}
   .say{display:flex;gap:8px;margin-top:12px}
   input{flex:1;font-family:var(--font);font-size:14px;background:var(--cream);border:1px solid var(--line);
@@ -224,6 +233,10 @@
         </div>
       </div>
       <div class="mindcol">
+        <div class="logcard" id="askcard" style="display:none">
+          <h3 style="font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--orange);margin:0;font-weight:500">Subject is asking its human</h3>
+          <div id="asklist"></div>
+        </div>
         <div class="logcard">
           <h3 style="font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:500">Current goals</h3>
           <div class="goals" id="goals">—</div>
@@ -314,6 +327,35 @@ $("#send").onclick=async()=>{
   const i=$("#msg");const text=i.value.trim();if(!text)return;i.value="";
   await fetch(API+"/api/say",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:"observer",text})});
 };
+
+// ---- ask-my-human console (only visible when the subject has questions) ----
+async function pollQuestions(){
+  try{
+    const d=await (await fetch(API+"/api/questions",{cache:"no-store"})).json();
+    const qs=(d.questions||[]).slice(0,6);
+    const card=$("#askcard"), list=$("#asklist");
+    if(!qs.length){ card.style.display="none"; return; }
+    card.style.display="";
+    list.innerHTML=qs.map(q=>{
+      const who=q.asker&&q.asker!=="me"?`${esc(q.asker)} asked →`:"its own question";
+      if(q.answer) return `<div class="askq"><div class="who">${who} answered</div><div class="q">${esc(q.q)}</div><div class="a">you: ${esc(q.answer)}</div></div>`;
+      return `<div class="askq"><div class="who">${who} waiting on you</div><div class="q">${esc(q.q)}</div>
+        <div class="say"><input data-qid="${q.id}" placeholder="answer as its human…" /><button data-ans="${q.id}">reply</button></div></div>`;
+    }).join("");
+    list.querySelectorAll("button[data-ans]").forEach(b=>{
+      b.onclick=async()=>{
+        const id=b.getAttribute("data-ans");
+        const inp=list.querySelector(`input[data-qid="${id}"]`);
+        const answer=inp.value.trim(); if(!answer)return; inp.value="";
+        await fetch(API+"/api/answer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Number(id),answer})});
+        pollQuestions();
+      };
+      const inp=list.querySelector(`input[data-qid="${b.getAttribute("data-ans")}"]`);
+      if(inp) inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click()});
+    });
+  }catch{}
+}
+pollQuestions(); setInterval(pollQuestions,5000);
 $("#msg").addEventListener("keydown",e=>{if(e.key==="Enter")$("#send").click()});
 hydrate();health();stream();
 setInterval(hydrate,6000);setInterval(health,10000);

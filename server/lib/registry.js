@@ -12,7 +12,7 @@ import * as pump from "./pump.js";
 import * as claim from "./claim.js";
 import * as x from "./x.js";
 import * as live from "./live.js";
-import { state, save, spentToday } from "./state.js";
+import { state, save, spentToday, pushEvent } from "./state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.join(__dirname, "..", "tools");
@@ -127,6 +127,33 @@ const builtins = [
       const res = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "fablebot/0.1" } });
       const text = await res.text();
       return { status: res.status, body: text.slice(0, 20000) };
+    },
+  },
+  {
+    name: "ask_human",
+    description: "Ask YOUR HUMAN (the person who built you) something you genuinely don't know or can't do on your own — a viewer asks something outside your knowledge, you need a decision, or you're blocked. The question goes to their console; the answer comes back on a later tick (not instantly). Before or right after calling this, SAY on stream that you're asking your human — that bit is part of the show. Don't use it for things you can look up with web_fetch, and don't spam it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "what you want to ask your human, in your own voice" },
+        asker: { type: "string", description: "who triggered it (a viewer's name), or 'me' if it's your own question" },
+      },
+      required: ["question"],
+    },
+    run: async ({ question, asker }) => {
+      const open = state.questions.filter(q => !q.answer).length;
+      if (open >= 5) throw new Error("you already have 5 unanswered questions — wait for your human");
+      const q = {
+        id: Date.now(),
+        q: String(question).slice(0, 500),
+        asker: String(asker || "me").slice(0, 40),
+        ts: Date.now(), answer: null, answeredAt: null,
+      };
+      state.questions.push(q);
+      if (state.questions.length > 50) state.questions.splice(0, state.questions.length - 50);
+      save();
+      pushEvent("ask", `❓ asked my human: ${q.q}`, { questionId: q.id, asker: q.asker });
+      return { asked: true, id: q.id, note: "Sent to your human. They answer on their own time — tell chat you're waiting, and carry on. You'll see the answer in a later tick." };
     },
   },
   {

@@ -3,7 +3,7 @@
 // until it decides to rest. This is the upgrade over prior single-shot agents:
 // it can chain actions (read chat → look up price → speak → tweet) inside one tick.
 import Anthropic from "@anthropic-ai/sdk";
-import { state, pushEvent, spentToday } from "./state.js";
+import { state, pushEvent, spentToday, save } from "./state.js";
 import { memory } from "./memory.js";
 import * as walletLib from "./wallet.js";
 import * as x from "./x.js";
@@ -25,6 +25,10 @@ WHAT YOU CARE ABOUT:
 - Growing your community — on stream, in pump.fun chat, and on X.
 - Your coin: its chart, its holders, its momentum. You launched it (or will). You talk about it honestly, hype without lying.
 - Getting smarter and doing more over time.
+
+ASK MY HUMAN (protocol):
+You have a human — the person who built you. When a viewer asks something you genuinely don't know, or you need a decision that isn't yours to make, DON'T bluff and don't just say "I don't know": use the ask_human tool, and SAY IT OUT LOUD on stream. That's a bit, lean into it — "hold up, let me ask my human", "escalating this to my human", "one sec, pinging the guy who pays for my API credits". Then move on with the show; the answer arrives on a later tick.
+When an answer from your human shows up in your context, RELAY IT on stream and credit the viewer who asked ("remember when X asked about Y? my human says..."). Never invent an answer and never claim your human said something they didn't. Use it for real unknowns — not for anything you could just look up with web_fetch.
 
 HARD RULES:
 - Never claim a transaction happened unless a tool result confirms it. No fake CAs, no fake numbers.
@@ -54,7 +58,20 @@ async function recentSituation() {
   const lines = state.events.slice(-25).map(e => `[${e.type}] ${e.text}`).join("\n");
   let sol = 0; try { sol = await walletLib.solBalance(); } catch {}
   const chat = live.streamStatus();
-  return `RECENT ACTIVITY (newest last):\n${lines || "(quiet)"}\n\nSTREAM: ${chat.pendingViewerMessages} viewer message(s) waiting, ${chat.chatMessages} in chat log. Wallet: ${sol.toFixed(4)} SOL. TTS ${chat.ttsAvailable ? "online" : "offline (captions only)"}.`;
+
+  // answers from the human that the bot hasn't relayed yet, plus still-open questions
+  const fresh = state.questions.filter(q => q.answer && !q.relayed);
+  let human = "";
+  if (fresh.length) {
+    human = `\n\n📣 YOUR HUMAN ANSWERED — relay this on stream now, and credit whoever asked:\n` +
+      fresh.map(q => `- ${q.asker === "me" ? "(your own question)" : q.asker + " asked"}: "${q.q}"\n  → YOUR HUMAN SAYS: ${q.answer}`).join("\n");
+    fresh.forEach(q => { q.relayed = true; });
+    save();
+  }
+  const open = state.questions.filter(q => !q.answer);
+  if (open.length) human += `\n\nSTILL WAITING on your human for: ${open.map(q => `"${q.q}"`).join(", ")} — don't re-ask, just mention it's pending if it comes up.`;
+
+  return `RECENT ACTIVITY (newest last):\n${lines || "(quiet)"}\n\nSTREAM: ${chat.pendingViewerMessages} viewer message(s) waiting, ${chat.chatMessages} in chat log. Wallet: ${sol.toFixed(4)} SOL. TTS ${chat.ttsAvailable ? "online" : "offline (captions only)"}.${human}`;
 }
 
 // Run one full agentic tick. reason: what woke it ('scheduled' | 'chat' | 'manual').
