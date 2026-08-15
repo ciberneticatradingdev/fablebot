@@ -154,7 +154,7 @@ export function mountCoinChart(canvas, opts = {}) {
     ctx.fillStyle = chg >= 0 ? THEME.up : THEME.down;
     ctx.fillText(fmtPrice(lastPx), W - 26, 38);
 
-    const top = 78, bot = H - 96, left = 22, right = W - 100;
+    const top = 74, bot = H - 96, left = 92, right = W - 26;
     const volTop = H - 84, volBot = H - 52;
 
     let lo = Math.min(...ks.map(k => k.l), lastPx);
@@ -173,8 +173,8 @@ export function mountCoinChart(canvas, opts = {}) {
     for (let i = 0; i <= 4; i++) {
       const y = top + (bot - top) * i / 4;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-      ctx.textAlign = "left";
-      ctx.fillText((hi - (hi - lo) * i / 4).toPrecision(3), right + 8, y);
+      ctx.textAlign = "right";
+      ctx.fillText((hi - (hi - lo) * i / 4).toPrecision(3), left - 8, y);
     }
 
     // candles
@@ -191,17 +191,23 @@ export function mountCoinChart(canvas, opts = {}) {
         const vh = (k.v / maxV) * (volBot - volTop);
         ctx.fillRect(x - bw / 2, volBot - vh, bw, vh);
       }
-      // wick
-      ctx.strokeStyle = col;
-      ctx.lineWidth = Math.max(1, bw * 0.14);
-      ctx.beginPath(); ctx.moveTo(x, Y(k.h)); ctx.lineTo(x, Y(k.l)); ctx.stroke();
+      // wick (real trades only)
+      if (!k.filled) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = Math.max(1, bw * 0.14);
+        ctx.beginPath(); ctx.moveTo(x, Y(k.h)); ctx.lineTo(x, Y(k.l)); ctx.stroke();
+      }
       // body (flat/filled periods render as a thin doji line)
       const yo = Y(k.o), yc = Y(k.c);
-      const bodyH = Math.max(k.filled ? 1.5 : 2.5, Math.abs(yc - yo));
-      ctx.fillStyle = up ? THEME.upFill : THEME.downFill;
-      if (k.filled) ctx.globalAlpha = 0.5;
-      ctx.fillRect(x - bw / 2, Math.min(yo, yc), bw, bodyH);
-      ctx.globalAlpha = 1;
+      if (k.filled) {
+        // no trades this period — a continuous line reads as "price held", which
+        // is true, instead of a gap that reads as broken data
+        ctx.fillStyle = "rgba(139,122,109,.5)";
+        ctx.fillRect(x - slot / 2, yc - 1, slot + 1, 2);
+      } else {
+        ctx.fillStyle = up ? THEME.upFill : THEME.downFill;
+        ctx.fillRect(x - bw / 2, Math.min(yo, yc), bw, Math.max(2.5, Math.abs(yc - yo)));
+      }
     });
 
     // last-price marker line
@@ -210,10 +216,10 @@ export function mountCoinChart(canvas, opts = {}) {
     ctx.beginPath(); ctx.moveTo(left, ly); ctx.lineTo(right, ly); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = THEME.cross;
-    ctx.fillRect(right + 4, ly - 12, 92, 24);
-    ctx.fillStyle = "#fff"; ctx.font = "600 14px 'SF Mono', Menlo, monospace";
+    ctx.fillRect(2, ly - 12, 86, 24);
+    ctx.fillStyle = "#fff"; ctx.font = "600 13px 'SF Mono', Menlo, monospace";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(fmtPrice(lastPx).slice(0, 11), right + 50, ly);
+    ctx.fillText(fmtPrice(lastPx).slice(0, 11), 45, ly);
 
     // footer
     ctx.font = "500 19px 'SF Mono', Menlo, monospace"; ctx.textAlign = "left"; ctx.fillStyle = THEME.dim;
