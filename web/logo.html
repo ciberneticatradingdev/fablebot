@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>fablebot logo capture</title>
+<style>body{margin:0;background:#f0eee6}canvas{display:block}</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script type="module">
+import * as THREE from "three";
+import { createFablebot, PALETTE } from "/fablebot-model.js";
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(1024, 1024, false);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(PALETTE.cream, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
+camera.position.set(0, 1.35, 13.2);
+camera.lookAt(0, 0.85, 0);
+
+scene.add(new THREE.HemisphereLight(0xfff6ec, 0xe8ddc9, 0.55));
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const key = new THREE.DirectionalLight(0xfff1e2, 1.35);
+key.position.set(5, 9, 7);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1; key.shadow.camera.far = 40;
+key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+key.shadow.camera.top = 8; key.shadow.camera.bottom = -8;
+key.shadow.bias = -0.0004; key.shadow.radius = 6;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.35); fill.position.set(-7, 3, 5); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffe9d6, 0.4); rim.position.set(0, 5, -8); scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: 0.13 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -1.31;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const bot = createFablebot();
+bot.update(0.7, {}); // a lively mid-idle pose
+scene.add(bot.group);
+
+renderer.render(scene, camera);
+window.LOGO = canvas.toDataURL("image/png");
+document.title = "ready";
+</script>
+</body>
+</html>

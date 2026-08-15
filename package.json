@@ -1,0 +1,11 @@
+{
+  "name": "fablebot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "fablebot — autonomous AI streamer experiment on Claude Fable 5",
+  "scripts": {
+    "build": "npm --prefix server install --omit=dev",
+    "start": "node server/index.js"
+  },
+  "engines": { "node": ">=20" }
+}

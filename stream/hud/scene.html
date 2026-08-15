@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280, initial-scale=1" />
+<title>fablebot — live</title>
+<style>
+  :root{
+    --cream:#f0eee6; --card:#faf9f5; --ink:#20140d; --dim:#8a7a6d;
+    --orange:#d9663f; --line:#e5ddd0; --fabric:#1c1815;
+    --font:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{width:1280px;height:800px;overflow:hidden;background:
+    radial-gradient(120% 90% at 50% 8%, #f7f5ee 0%, #efece3 55%, #e9e5d8 100%);
+    color:var(--ink);font-family:var(--font)}
+  /* jumbotron chart card behind the character */
+  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:430px;
+    background:var(--card);border:1px solid var(--line);border-radius:22px;padding:6px;
+    box-shadow:0 14px 44px rgba(32,20,13,.06)}
+  .chartCard canvas{width:100%;height:100%;display:block}
+  #stage{position:absolute;inset:0}
+  #bot{width:1280px;height:800px;display:block;position:relative;z-index:2}
+
+  .brand{position:absolute;top:26px;left:30px;display:flex;align-items:center;gap:12px;font-weight:600;font-size:24px}
+  .brand .mk{width:26px;height:26px;border-radius:7px;background:var(--orange);position:relative}
+  .brand .mk:before{content:"";position:absolute;inset:7px 7px auto 7px;height:5px;background:var(--cream)}
+  .brand .mk:after{content:"";position:absolute;inset:auto 7px 7px 7px;height:5px;background:var(--cream)}
+  .live{position:absolute;top:30px;right:30px;display:flex;align-items:center;gap:8px;font-family:var(--mono);
+    font-size:14px;color:var(--orange);background:var(--card);border:1px solid #eccab9;padding:7px 14px;border-radius:22px}
+  .live .d{width:9px;height:9px;border-radius:50%;background:var(--orange);animation:pulse 1.5s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* chat rail */
+  .chat{position:absolute;top:96px;right:30px;width:340px;bottom:150px;
+    background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;overflow:hidden;
+    display:flex;flex-direction:column;gap:10px;justify-content:flex-end}
+  .chat h3{margin:0 0 auto;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:500}
+  .m{font-size:14.5px;line-height:1.4}
+  .m .u{color:var(--orange);font-weight:600}
+  .m.me .u{color:var(--ink)}
+  .m .b{color:#3a2e25}
+
+  /* caption bar */
+  .cap{position:absolute;left:30px;right:390px;bottom:112px;background:rgba(28,24,21,.94);color:#f6f2ea;
+    padding:18px 22px;border-radius:18px;font-size:20px;line-height:1.4;min-height:26px;
+    opacity:0;transform:translateY(10px);transition:.28s;box-shadow:0 10px 40px rgba(28,24,21,.18)}
+  .cap.show{opacity:1;transform:none}
+  .cap .who{font-family:var(--mono);font-size:12px;color:var(--orange);letter-spacing:.08em;display:block;margin-bottom:5px}
+
+  /* footer stats */
+  .foot{position:absolute;left:30px;bottom:34px;display:flex;gap:26px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 22px}
+  .foot.hide{opacity:0}
+  .stat .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .stat .v{font-size:20px;margin-top:2px}
+  .stat .v.orange{color:var(--orange)}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="chartCard"><canvas id="chart" width="1256" height="836"></canvas></div>
+<div id="stage"><canvas id="bot"></canvas></div>
+<div class="brand"><span class="mk"></span> fablebot</div>
+<div class="live"><span class="d"></span> LIVE</div>
+
+<div class="chat">
+  <h3>live chat</h3>
+  <div id="chatlist" style="display:flex;flex-direction:column;gap:10px"></div>
+</div>
+
+<div class="cap" id="cap"><span class="who" id="capwho">fablebot</span><span id="captext"></span></div>
+
+<div class="foot" id="foot">
+  <div class="stat"><div class="k">coin</div><div class="v orange" id="coin">—</div></div>
+  <div class="stat"><div class="k">wallet</div><div class="v" id="sol">—</div></div>
+  <div class="stat"><div class="k">status</div><div class="v" id="stat">on air</div></div>
+</div>
+
+<script type="module">
+import { mountScene } from "/fablebot-model.js";
+import { mountCoinChart } from "/coin-chart.js";
+const view = mountScene(document.getElementById("bot"), { transparent: true });
+view.bot.group.position.x = 0.6;  // stand to the right of the jumbotron
+view.bot.group.scale.setScalar(0.88); // clear of the chat rail
+mountCoinChart(document.getElementById("chart"), {
+  getCoin: async () => {
+    try { const s = await (await fetch("/api/state", { cache: "no-store" })).json(); return s.coin ? { mint: s.coin.mint, symbol: s.coin.symbol } : null; }
+    catch { return null; }
+  },
+});
+
+const $=s=>document.querySelector(s);
+const esc=x=>String(x||"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+async function j(u){ try{ return await (await fetch(u,{cache:"no-store"})).json(); }catch{ return null; } }
+
+// chat
+async function pollChat(){
+  const d=await j("./chat.json"); if(!d) return;
+  const box=$("#chatlist"); box.innerHTML="";
+  for(const m of (d.messages||[]).slice(-8)){
+    const el=document.createElement("div");
+    el.className="m"+(m.me?" me":"");
+    el.innerHTML=`<span class="u">${esc(m.user)}</span> <span class="b">${esc(m.body)}</span>`;
+    box.appendChild(el);
+  }
+}
+// captions → speaking
+let lastCap="";let capTimer=null;
+async function pollVoice(){
+  const d=await j("./live.json"); if(!d||!d.lines?.length) return;
+  const line=d.lines[d.lines.length-1];
+  const key=line.t+line.body; if(key===lastCap) return; lastCap=key;
+  $("#captext").textContent=line.body; $("#cap").classList.add("show");
+  view.setSpeaking(true);
+  clearTimeout(capTimer);
+  const dur=Math.min(7000,Math.max(2400,line.body.length*55));
+  capTimer=setTimeout(()=>{ $("#cap").classList.remove("show"); view.setSpeaking(false); }, dur);
+}
+async function pollState(){
+  const s=await j("/api/state"); if(!s) return;
+  $("#sol").textContent=(s.sol??0).toFixed(3)+" ◎";
+  $("#coin").textContent=s.coin?("$"+s.coin.symbol):"soon";
+}
+pollChat();pollVoice();pollState();
+setInterval(pollChat,2000);setInterval(pollVoice,1200);setInterval(pollState,8000);
+</script>
+</body>
+</html>
