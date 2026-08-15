@@ -10,3 +10,5 @@ stream/pump-rtmp.env
 *.log
 .wallet-backup.json
 .vercel
+server/launch-test.png
+.mint-pump.json

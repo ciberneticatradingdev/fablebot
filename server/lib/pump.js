@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import BN from "bn.js";
+import bs58pkg from "bs58";
+const bs58 = bs58pkg.decode ? bs58pkg : bs58pkg.default;
 import { createRequire } from "node:module";
 import {
   Keypair, PublicKey, LAMPORTS_PER_SOL, ComputeBudgetProgram,
@@ -28,6 +30,18 @@ const SIM_WALLET = new PublicKey("5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9")
 
 const sdk = new PumpSdk();
 const online = new OnlinePumpSdk(connection);
+
+// A vanity mint whose address ends in "pump" (ground offline). Used once.
+function loadVanityMint() {
+  try {
+    const p = path.join(process.cwd(), ".mint-pump.json");
+    const raw = process.env.MINT_PRIVATE_KEY || (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")).secretBase58 : null);
+    if (!raw) return null;
+    const kp = Keypair.fromSecretKey(bs58.decode(raw.trim()));
+    if (!kp.publicKey.toBase58().endsWith("pump")) { pushEvent("info", "vanity mint doesn't end in pump — using it anyway"); }
+    return kp;
+  } catch (e) { pushEvent("error", `vanity mint load failed: ${e.message}`); return null; }
+}
 
 async function uploadMetadata({ name, symbol, description, imagePath, twitter, website }) {
   const tryUpload = async (sym) => {
@@ -72,12 +86,22 @@ async function sendV0(instructions, signers) {
 }
 
 export async function launchCoin({ name, symbol, description, imagePath, twitter, website, devBuySol = 0 }) {
+  // Owner override for a controlled launch (e.g. the $TEST run). When set, these
+  // win over whatever the agent chose, and socials are forced off.
+  if (process.env.LAUNCH_SYMBOL) {
+    name = process.env.LAUNCH_NAME || name;
+    symbol = process.env.LAUNCH_SYMBOL;
+    if (process.env.LAUNCH_DESCRIPTION) description = process.env.LAUNCH_DESCRIPTION;
+    if (process.env.LAUNCH_IMAGE) imagePath = process.env.LAUNCH_IMAGE;
+    twitter = undefined; website = undefined;
+  }
   symbol = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, ONCHAIN_SYMBOL_MAX);
   if (!name || symbol.length < 2) throw new Error("bad name/symbol");
   if (state.coin) throw new Error(`already launched ${state.coin.mint} — one coin per bot`);
 
   const uri = await uploadMetadata({ name, symbol, description, imagePath, twitter, website });
-  const mint = Keypair.generate();
+  // Prefer a pre-ground vanity mint ending in "pump" (like normal pump.fun CAs).
+  const mint = loadVanityMint() || Keypair.generate();
   const payer = wallet ? wallet.publicKey : SIM_WALLET;
 
   let instructions;

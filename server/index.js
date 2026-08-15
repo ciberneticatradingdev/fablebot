@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import { state, load, pushEvent, sseClients, spentToday } from "./lib/state.js";
 import { loadMemory, memory, maybeConsolidate } from "./lib/memory.js";
 import { runTick, anthropic, isDemo as brainDemo } from "./lib/brain.js";
@@ -29,6 +30,7 @@ async function tickOnce(reason = "scheduled") {
   try { await runTick(reason); }
   catch (e) { pushEvent("error", `tick crashed: ${e.message}`); }
   finally { ticking = false; }
+  startChatPoller(); // begins once the agent has launched its coin
   maybeConsolidate(anthropic, CONSOLIDATE_MODEL).catch(() => {});
 }
 
@@ -111,8 +113,27 @@ app.get("/", (req, res, next) => {
 app.use(express.static(path.join(__dirname, "..", "web")));
 app.use("/stream", express.static(path.join(__dirname, "..", "stream")));
 
+// pump.fun chat + comments poller — spawn once the coin's mint is known
+// (from COIN_MINT or right after the agent launches its coin).
+let pollerStarted = false;
+function startChatPoller() {
+  if (pollerStarted) return;
+  const mint = process.env.COIN_MINT || state.coin?.mint;
+  if (!mint) return;
+  pollerStarted = true;
+  try {
+    const child = spawn(process.execPath, [path.join(__dirname, "chat-poller.mjs")], {
+      env: { ...process.env, COIN_MINT: mint },
+      stdio: "inherit",
+    });
+    child.on("exit", (c) => { pollerStarted = false; pushEvent("info", `chat poller exited (${c}) — restarting in 15s`); setTimeout(startChatPoller, 15000); });
+    pushEvent("info", `chat poller started for ${mint}`);
+  } catch (e) { pollerStarted = false; pushEvent("error", `chat poller spawn failed: ${e.message}`); }
+}
+
 app.listen(PORT, () => {
   pushEvent("info", `fablebot up on :${PORT} — brain ${brainDemo ? "DEMO" : "LIVE"}, wallet ${walletLib.isDemo ? "DEMO" : walletLib.address}, x ${x.isDemo ? "DEMO" : "LIVE"}, enabled=${ENABLED}`);
   tickOnce("boot");
   setInterval(() => tickOnce("scheduled"), TICK_MS);
+  startChatPoller();
 });
