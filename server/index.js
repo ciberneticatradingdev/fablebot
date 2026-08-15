@@ -39,6 +39,17 @@ if (process.env.COIN_MINT && state.coin?.mint !== process.env.COIN_MINT.trim()) 
   pushEvent("info", prev ? `coin switched ${prev} → ${mint}` : `coin set from COIN_MINT: ${mint}`);
 }
 
+// A standing note from the operator, injected into the agent's memory. Set via
+// env (not an HTTP endpoint) so nobody can write into the agent's brain remotely.
+if (process.env.OPERATOR_NOTE) {
+  const v = process.env.OPERATOR_NOTE.slice(0, 900);
+  if (state.notes.from_my_human !== v) {
+    state.notes.from_my_human = v;
+    save();
+    pushEvent("info", "note from my human updated");
+  }
+}
+
 const PORT = Number(process.env.PORT || 8947);
 const ENABLED = process.env.ENABLED !== "false";           // master run switch (agent acts)
 const TICK_MS = Number(process.env.TICK_MINUTES || 3) * 60 * 1000;
