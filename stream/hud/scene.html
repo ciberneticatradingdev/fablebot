@@ -140,21 +140,34 @@ function chatFromEvent(text) {
 // ---------- voice: browser TTS + caption + speaking animation ----------
 let audioOn = false;
 const btn = $("#audioBtn");
+// Real-audio TTS (works in OBS's embedded browser, which has NO speechSynthesis).
+// StreamElements returns an mp3 — no API key. speechSynthesis is only a fallback
+// for normal browsers if the audio fetch fails.
+// Google Translate TTS — real mp3, no key. ~200 chars/request, so long lines
+// are chunked at word boundaries and queued. Playback via <audio> needs no CORS.
+const ttsUrl = t => `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(t)}`;
+function chunkText(text, max = 190) {
+  const words = String(text).split(/\s+/);
+  const out = []; let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length > max) { if (cur) out.push(cur.trim()); cur = w; }
+    else cur += " " + w;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.length ? out : [String(text).slice(0, max)];
+}
+const player = new Audio();
+player.preload = "auto";
+let queue = [];
+let playing = false;
+
 btn.onclick = () => {
   audioOn = !audioOn;
   btn.className = "audio" + (audioOn ? " on" : "");
   btn.textContent = audioOn ? "🔊 voice on" : "🔇 enable voice";
-  if (audioOn) speak("voice on. now you can actually hear me.");
-  else speechSynthesis.cancel();
+  if (audioOn) { player.play().catch(() => {}); speak("voice on. now you can actually hear me."); }
+  else { queue = []; player.pause(); try { speechSynthesis.cancel(); } catch {} }
 };
-let voice = null;
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  voice = vs.find(v => /en[-_]US/i.test(v.lang) && /Google|Samantha|Aaron|Daniel/i.test(v.name))
-       || vs.find(v => /en/i.test(v.lang)) || null;
-}
-pickVoice();
-if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = pickVoice;
 
 let capTimer = null;
 function showCap(text, ms) {
@@ -163,18 +176,42 @@ function showCap(text, ms) {
   clearTimeout(capTimer);
   capTimer = setTimeout(() => { $("#cap").classList.remove("show"); view.setSpeaking(false); }, ms);
 }
+function pickVoice() {
+  try {
+    const vs = speechSynthesis.getVoices();
+    return vs.find(v => /en/i.test(v.lang)) || null;
+  } catch { return null; }
+}
+function fallbackSpeak(text) {
+  if (!("speechSynthesis" in window)) { view.setSpeaking(false); return; }
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if (v) u.voice = v;
+    u.rate = 1.04; u.pitch = 0.95;
+    u.onstart = () => view.setSpeaking(true);
+    u.onend = () => { view.setSpeaking(false); playing = false; next(); };
+    speechSynthesis.speak(u);
+  } catch { view.setSpeaking(false); playing = false; next(); }
+}
+function next() {
+  if (playing || !queue.length) return;
+  const text = queue.shift();
+  playing = true;
+  view.setSpeaking(true);
+  player.src = ttsUrl(text);
+  const done = () => { playing = false; view.setSpeaking(false); next(); };
+  player.onended = done;
+  player.onerror = () => fallbackSpeak(text);
+  player.play().catch(() => fallbackSpeak(text));
+}
 function speak(text) {
   const est = Math.min(9000, Math.max(2400, text.length * 60));
   showCap(text, est);
-  view.setSpeaking(true);
-  if (!audioOn || !("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  if (voice) u.voice = voice;
-  u.rate = 1.04; u.pitch = 0.92;
-  u.onstart = () => view.setSpeaking(true);
-  u.onend = () => { view.setSpeaking(false); $("#cap").classList.remove("show"); clearTimeout(capTimer); };
-  speechSynthesis.speak(u);
+  if (!audioOn) { view.setSpeaking(true); setTimeout(() => view.setSpeaking(false), est); return; }
+  for (const c of chunkText(text)) queue.push(c);
+  if (queue.length > 8) queue = queue.slice(-8);
+  next();
 }
 
 // ---------- live event stream from the agent ----------
