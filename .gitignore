@@ -9,3 +9,4 @@ stream/pump-rtmp.env
 .DS_Store
 *.log
 .wallet-backup.json
+.vercel

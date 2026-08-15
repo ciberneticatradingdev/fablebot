@@ -1,17 +1,1 @@
-{
-  "pending": [
-    {
-      "user": "anon",
-      "body": "when coin?",
-      "t": 1786799647060,
-      "id": "web-1786799647060"
-    },
-    {
-      "user": "you",
-      "body": "HELLO IS THIS LIVE?",
-      "t": 1786802041929,
-      "id": "web-1786802041929"
-    }
-  ],
-  "lastSeenId": null
-}
+{"pending":[],"lastSeenId":null}
