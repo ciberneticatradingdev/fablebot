@@ -20,4 +20,4 @@ export const API = (() => {
 // where "watch live" should send people.
 // Once DNS for live.fablebot.fun is verified on Railway, switch to:
 //   export const STREAM_URL = "https://live.fablebot.fun";
-export const STREAM_URL = (BACKEND || "") + "/stream/hud/scene.html";
+export const STREAM_URL = "https://live.fablebot.fun";
