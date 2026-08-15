@@ -18,4 +18,4 @@ export const API = (() => {
 })();
 
 // where "watch live" should send people (the HUD lives on the backend/rig host)
-export const STREAM_URL = (API || "") + "/stream/hud/scene.html";
+export const STREAM_URL = "https://live.fablebot.fun";

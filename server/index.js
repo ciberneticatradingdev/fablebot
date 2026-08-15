@@ -101,6 +101,13 @@ app.post("/api/say", (req, res) => {
   res.json({ ok: true });
 });
 
+// live.fablebot.fun → the stream HUD at the root
+app.get("/", (req, res, next) => {
+  if ((req.hostname || "").startsWith("live.")) {
+    return res.sendFile(path.join(__dirname, "..", "stream", "hud", "scene.html"));
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, "..", "web")));
 app.use("/stream", express.static(path.join(__dirname, "..", "stream")));
 
