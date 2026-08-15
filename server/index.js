@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { state, load, pushEvent, sseClients, spentToday } from "./lib/state.js";
 import { loadMemory, memory, maybeConsolidate } from "./lib/memory.js";
 import { runTick, anthropic, isDemo as brainDemo } from "./lib/brain.js";
+import { launchCoin } from "./lib/pump.js";
 import * as walletLib from "./lib/wallet.js";
 import * as x from "./lib/x.js";
 import * as live from "./lib/live.js";
@@ -133,6 +134,18 @@ function startChatPoller() {
 
 app.listen(PORT, () => {
   pushEvent("info", `fablebot up on :${PORT} — brain ${brainDemo ? "DEMO" : "LIVE"}, wallet ${walletLib.isDemo ? "DEMO" : walletLib.address}, x ${x.isDemo ? "DEMO" : "LIVE"}, enabled=${ENABLED}`);
+  // One-shot deterministic launch (owner test). Fires once on boot, then the
+  // agent takes over the coin. Params come from LAUNCH_* env (applied in launchCoin).
+  if (process.env.LAUNCH_NOW === "true" && !state.coin) {
+    launchCoin({
+      name: process.env.LAUNCH_NAME || "test",
+      symbol: process.env.LAUNCH_SYMBOL || "TEST",
+      description: process.env.LAUNCH_DESCRIPTION || "test",
+      imagePath: path.join(__dirname, "..", "stream", "hud", "logo.png"),
+    })
+      .then((c) => { pushEvent("info", `LAUNCH_NOW complete: ${c.mint}`); startChatPoller(); })
+      .catch((e) => pushEvent("error", `LAUNCH_NOW failed: ${e.message}`));
+  }
   tickOnce("boot");
   setInterval(() => tickOnce("scheduled"), TICK_MS);
   startChatPoller();
