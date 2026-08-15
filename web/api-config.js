@@ -6,7 +6,7 @@
 //   BACKEND = "https://fablebot-production.up.railway.app"
 //
 // Leave it "" to always use same-origin (fine if you only deploy on Railway).
-const BACKEND = "";
+const BACKEND = "https://fablebot-production-c84a.up.railway.app";
 
 // same-origin on localhost or when no backend override is set; otherwise the
 // override only kicks in when we're NOT already on that backend host.
