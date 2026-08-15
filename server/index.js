@@ -15,8 +15,8 @@ import * as live from "./lib/live.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-load();
-loadMemory();
+await load();
+await loadMemory();
 
 // Rehydrate the launched coin from COIN_MINT so the server never "forgets" it
 // across ephemeral restarts/deploys (its state disk is not persisted).

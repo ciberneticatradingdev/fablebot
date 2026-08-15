@@ -37,7 +37,14 @@ export function writeInbox(box) {
 export function drainInbox() {
   const box = readInbox();
   const pending = box.pending || [];
-  if (pending.length) writeJsonAtomic(INBOX, { ...box, pending: [] });
+  if (pending.length) {
+    writeJsonAtomic(INBOX, { ...box, pending: [] });
+    // journal each viewer/comment so it's persisted (DB) and part of the context,
+    // not just fleeting inbox state. Skip web messages (already logged by /api/say).
+    for (const m of pending) {
+      if (m.src && m.src !== "web") pushEvent("chat", `${m.user}: ${m.body}`, { source: m.src });
+    }
+  }
   return pending;
 }
 

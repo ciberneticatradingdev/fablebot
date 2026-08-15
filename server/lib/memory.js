@@ -3,15 +3,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dataDir, state, pushEvent } from "./state.js";
+import { hasDb, dbGetKv, dbSetKv } from "./db.js";
 
 const MEM_FILE = path.join(dataDir, "memory.json");
 
 export const memory = { summary: "", consolidatedThrough: 0 };
 
-export function loadMemory() {
+export async function loadMemory() {
+  if (hasDb) {
+    try { const m = await dbGetKv("memory"); if (m) Object.assign(memory, m); return; } catch {}
+  }
   try { Object.assign(memory, JSON.parse(fs.readFileSync(MEM_FILE, "utf8"))); } catch {}
 }
 function saveMemory() {
+  if (hasDb) dbSetKv("memory", { summary: memory.summary, consolidatedThrough: memory.consolidatedThrough }).catch(() => {});
   try { fs.writeFileSync(MEM_FILE, JSON.stringify(memory, null, 2)); } catch {}
 }
 
