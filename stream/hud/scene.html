@@ -17,10 +17,27 @@
     radial-gradient(120% 90% at 50% 8%, #f7f5ee 0%, #efece3 55%, #e9e5d8 100%);
     color:var(--ink);font-family:var(--font)}
 
-  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:430px;
+  .chartCard{position:absolute;left:30px;top:96px;width:640px;height:346px;
     background:var(--card);border:1px solid var(--line);border-radius:22px;padding:6px;
     box-shadow:0 14px 44px rgba(32,20,13,.06)}
   .chartCard canvas{width:100%;height:100%;display:block}
+
+  /* the part of the brain it does NOT say out loud */
+  .mind{position:absolute;left:30px;top:452px;width:640px;height:164px;
+    background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px;
+    overflow:hidden;display:flex;flex-direction:column}
+  .mind .hd{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .mind .hd b{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);font-weight:500}
+  .mind .hd .dot{width:6px;height:6px;border-radius:50%;background:var(--orange);animation:pulse 1.6s infinite}
+  .mind .lines{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:6px;justify-content:flex-end}
+  .ml{display:flex;gap:9px;font-size:13px;line-height:1.35;opacity:.95}
+  .ml .k{flex:none;width:42px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--orange);padding-top:3px}
+  .ml.tool .k{color:#2f7d5b}
+  .ml .v{color:#5c4c40;overflow-wrap:anywhere}
+  .ml.fresh{animation:fade .5s ease-out}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:.95;transform:none}}
   #stage{position:absolute;inset:0}
   #bot{width:1280px;height:800px;display:block;position:relative;z-index:2}
 
@@ -79,7 +96,11 @@
 </script>
 </head>
 <body>
-<div class="chartCard"><canvas id="chart" width="1256" height="836"></canvas></div>
+<div class="chartCard"><canvas id="chart" width="1256" height="676"></canvas></div>
+<div class="mind">
+  <div class="hd"><span class="dot"></span><b>inner monologue — what it isn't saying</b></div>
+  <div class="lines" id="mindlines"></div>
+</div>
 <div id="stage"><canvas id="bot"></canvas></div>
 <div class="brand"><span class="mk"></span> fablebot</div>
 <button class="audio" id="audioBtn">🔇 enable voice</button>
@@ -216,10 +237,39 @@ function speak(text) {
   next();
 }
 
+// ---------- inner monologue: thoughts/tools it never says out loud ----------
+const mindBox = $("#mindlines");
+const TOOL_LABEL = {
+  get_status: "checking my own vitals", read_stream_chat: "reading chat",
+  read_x: "scanning X", web_fetch: "reading the internet", post_tweet: "writing a tweet",
+  send_chat: "typing in chat", speak: "about to speak", remember: "writing to memory",
+  set_goals: "rewriting my goals", ask_human: "escalating to my human",
+  claim_creator_fees: "claiming creator fees", buy_token: "placing a buy",
+  launch_coin: "launching the coin",
+};
+function pushMind(kind, text) {
+  const el = document.createElement("div");
+  el.className = "ml fresh " + kind;
+  el.innerHTML = `<span class="k">${esc(kind)}</span><span class="v">${esc(text)}</span>`;
+  mindBox.appendChild(el);
+  while (mindBox.children.length > 3) mindBox.removeChild(mindBox.firstChild);
+  setTimeout(() => el.classList.remove("fresh"), 600);
+}
+function mindFromEvent(e) {
+  if (e.type === "think") pushMind("think", e.text.replace(/^tick #?/i, "waking up — tick "));
+  else if (e.type === "act") pushMind("act", e.text.slice(0, 150) + (e.text.length > 150 ? "…" : ""));
+  else if (e.type === "tool") {
+    const name = String(e.text).split("(")[0];
+    if (name === "speak" || name === "send_chat") return; // that part IS spoken
+    pushMind("tool", TOOL_LABEL[name] || name.replace(/_/g, " "));
+  } else if (e.type === "ask") pushMind("act", e.text);
+}
+
 // ---------- live event stream from the agent ----------
 function handleEvent(e) {
   if (e.type === "chat") chatFromEvent(e.text);
   else if (e.type === "speak" || e.type === "deploy") speak(e.text);
+  mindFromEvent(e);
 }
 async function hydrate() {
   const s = await j("/api/state");
@@ -237,6 +287,7 @@ async function hydrate() {
 (async () => {
   const s = await hydrate();
   for (const e of (s?.events || []).slice(-40)) if (e.type === "chat") chatFromEvent(e.text);
+  for (const e of (s?.events || []).slice(-12)) mindFromEvent(e); // seed the monologue
   const es = new EventSource("/api/feed");
   es.onmessage = ev => { try { handleEvent(JSON.parse(ev.data)); } catch {} };
   es.onerror = () => {};
