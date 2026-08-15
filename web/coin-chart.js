@@ -43,9 +43,41 @@ export function mountCoinChart(canvas, opts = {}) {
   const getCoin = opts.getCoin || (async () => null);
 
   let coin = null, px = null, pairAddr = null;
-  let raw = [];               // real OHLCV from geckoterminal
+  let raw = [];               // OHLCV backfill from geckoterminal (rate-limited, best-effort)
+  let ownBuckets = new Map(); // candles we build ourselves from live DexScreener prices
   const STEP = 60;            // 1-minute candles
   const MAX_BARS = 64;
+
+  // Our own candles are the reliable source: geckoterminal 429s easily and a
+  // fresh pump.fun pool often has no OHLCV yet. Each price sample updates the
+  // current minute's bucket. Persisted so an OBS/browser restart keeps history.
+  const lsKey = () => `fb_candles_${coin?.mint || "none"}`;
+  function loadOwn() {
+    try {
+      const j = JSON.parse(localStorage.getItem(lsKey()) || "[]");
+      const cut = Math.floor(Date.now() / 1000) - MAX_BARS * STEP * 3;
+      ownBuckets = new Map(j.filter(k => k.t > cut).map(k => [k.t, k]));
+    } catch {}
+  }
+  function saveOwn() {
+    try { localStorage.setItem(lsKey(), JSON.stringify([...ownBuckets.values()].slice(-MAX_BARS * 2))); } catch {}
+  }
+  function sample(price) {
+    if (!(price > 0)) return;
+    const t = Math.floor(Date.now() / 1000 / STEP) * STEP;
+    const k = ownBuckets.get(t);
+    if (!k) ownBuckets.set(t, { t, o: price, h: price, l: price, c: price, v: 0 });
+    else { k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
+    if (ownBuckets.size > MAX_BARS * 3) ownBuckets.delete([...ownBuckets.keys()][0]);
+    saveOwn();
+  }
+  // merge geckoterminal history with our own live buckets (ours wins on overlap)
+  function merged() {
+    const m = new Map();
+    for (const k of raw) m.set(Math.floor(k.t / STEP) * STEP, k);
+    for (const [t, k] of ownBuckets) m.set(t, { ...m.get(t), ...k, v: (m.get(t)?.v ?? 0) || k.v });
+    return [...m.values()].sort((a, b) => a.t - b.t);
+  }
 
   // ---- demo candles (pre-launch) ----
   let demo = [];
@@ -64,8 +96,10 @@ export function mountCoinChart(canvas, opts = {}) {
   for (let i = 0; i < MAX_BARS; i++) demoStep();
 
   async function pollMarket() {
+    const had = coin?.mint;
     try { coin = (await getCoin()) || coin; } catch {}
     if (!coin?.mint) return;
+    if (!had) loadOwn();
     try {
       const r = await fetch("https://api.dexscreener.com/latest/dex/tokens/" + coin.mint);
       const j = await r.json();
@@ -79,6 +113,7 @@ export function mountCoinChart(canvas, opts = {}) {
       };
       if (!pairAddr) { pairAddr = p.pairAddress; pollOhlcv(); }
       pairAddr = p.pairAddress;
+      sample(px.usd);
     } catch {}
   }
   async function pollOhlcv() {
@@ -98,10 +133,11 @@ export function mountCoinChart(canvas, opts = {}) {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    const live = !!(coin?.mint && raw.length);
+    const series = coin?.mint ? merged() : [];
+    const live = series.length > 0;
     const sym = coin?.symbol || "FABLEBOT";
     const nowSec = Math.floor(Date.now() / 1000);
-    let ks = live ? densify(raw, STEP, MAX_BARS, nowSec) : demo;
+    let ks = live ? densify(series, STEP, MAX_BARS, nowSec) : demo;
     if (!ks.length) ks = demo;
 
     const lastK = ks[ks.length - 1];
@@ -188,8 +224,8 @@ export function mountCoinChart(canvas, opts = {}) {
   pollMarket(); draw();
   const timers = [
     setInterval(pollMarket, 8000),
-    setInterval(pollOhlcv, 20000),
-    setInterval(() => { if (!(coin?.mint && raw.length)) demoStep(); draw(); }, 4000),
+    setInterval(pollOhlcv, 120000),   // backfill only; rate-limited upstream
+    setInterval(() => { if (!(coin?.mint)) demoStep(); draw(); }, 4000),
     setInterval(draw, 1000),
   ];
   return { stop: () => timers.forEach(clearInterval), draw };
