@@ -54,12 +54,14 @@ if (process.env.MEMORY_RESET && state.notes._memory_reset !== process.env.MEMORY
 
 // A standing note from the operator, injected into the agent's memory. Set via
 // env (not an HTTP endpoint) so nobody can write into the agent's brain remotely.
-if (process.env.OPERATOR_NOTE) {
-  const v = process.env.OPERATOR_NOTE.slice(0, 900);
-  if (state.notes.from_my_human !== v) {
-    state.notes.from_my_human = v;
+for (const [envVar, noteKey] of [["OPERATOR_NOTE", "from_my_human"], ["TOOLS_NOTE", "my_new_tools"]]) {
+  const raw = process.env[envVar];
+  if (!raw) continue;
+  const v = raw.slice(0, 1600);
+  if (state.notes[noteKey] !== v) {
+    state.notes[noteKey] = v;
     save();
-    pushEvent("info", "note from my human updated");
+    pushEvent("info", `note from my human updated (${noteKey})`);
   }
 }
 

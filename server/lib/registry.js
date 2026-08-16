@@ -10,6 +10,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import * as walletLib from "./wallet.js";
 import * as pump from "./pump.js";
 import * as claim from "./claim.js";
+import * as jupiter from "./jupiter.js";
 import * as x from "./x.js";
 import * as live from "./live.js";
 import { state, save, spentToday, pushEvent } from "./state.js";
@@ -71,17 +72,45 @@ const builtins = [
   },
   {
     name: "buy_token",
-    description: "Buy a pump.fun token with SOL from your wallet (bonding curve only). Respects spend caps.",
+    description: "Buy any Solana token with SOL from your wallet, routed through the Jupiter aggregator. Works on the pump.fun bonding curve AND after a coin graduates to PumpSwap/Raydium — use this for buybacks of your own coin. Respects your spend caps. Omit `mint` to buy your own coin.",
     input_schema: {
       type: "object",
-      properties: { mint: { type: "string" }, sol: { type: "number" } },
-      required: ["mint", "sol"],
+      properties: {
+        mint: { type: "string", description: "token mint; defaults to your own coin" },
+        sol: { type: "number", description: "how much SOL to spend" },
+      },
+      required: ["sol"],
     },
     run: async ({ mint, sol }) => {
       sol = Number(sol);
       if (!(sol > 0)) throw new Error("sol must be > 0");
-      guardSpend(sol, `buy ${mint}`);
-      return await pump.buyToken(mint, sol);
+      const target = mint || state.coin?.mint;
+      if (!target) throw new Error("no mint given and you have no coin");
+      guardSpend(sol, `buy ${target}`);
+      return await jupiter.buyWithSol(target, sol);
+    },
+  },
+  {
+    name: "sell_token",
+    description: "Sell tokens back to SOL through Jupiter (any venue). Amount is in raw base units — check get_status for your holdings first. Use sparingly: selling your own coin looks bad and your community will see it on-chain.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mint: { type: "string" },
+        amountRaw: { type: "string", description: "raw base units to sell" },
+      },
+      required: ["mint", "amountRaw"],
+    },
+    run: async ({ mint, amountRaw }) => await jupiter.sellForSol(mint, amountRaw),
+  },
+  {
+    name: "quote_price",
+    description: "Check the live market price of a token via Jupiter without trading — returns how many tokens 1 SOL buys, the price impact, and which venue routes it. Omit `mint` for your own coin.",
+    input_schema: { type: "object", properties: { mint: { type: "string" } } },
+    run: async ({ mint }) => {
+      const target = mint || state.coin?.mint;
+      if (!target) throw new Error("no mint given and you have no coin");
+      return await jupiter.quotePrice(target);
     },
   },
   {
