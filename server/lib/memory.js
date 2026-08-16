@@ -20,6 +20,15 @@ function saveMemory() {
   try { fs.writeFileSync(MEM_FILE, JSON.stringify(memory, null, 2)); } catch {}
 }
 
+// Wipe the consolidated archive. Used when older memories contradict a fact the
+// operator has since settled (e.g. which coin is ours) — a stale 500-word
+// summary outweighs any single new note, so it has to go.
+export function resetMemorySummary() {
+  memory.summary = "";
+  memory.consolidatedThrough = state.events.length ? state.events[state.events.length - 1].id : 0;
+  saveMemory();
+}
+
 let consolidating = false;
 
 // anthropic: an Anthropic client (or null → skip). model: cheap model for compaction.

@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { state, load, pushEvent, sseClients, spentToday, save } from "./lib/state.js";
-import { loadMemory, memory, maybeConsolidate } from "./lib/memory.js";
+import { loadMemory, memory, maybeConsolidate, resetMemorySummary } from "./lib/memory.js";
 import { hasDb, dbLoadEventsByType } from "./lib/db.js";
 import { runTick, anthropic, isDemo as brainDemo } from "./lib/brain.js";
 import { launchCoin } from "./lib/pump.js";
@@ -37,6 +37,19 @@ if (process.env.COIN_MINT && state.coin?.mint !== process.env.COIN_MINT.trim()) 
   }
   save();
   pushEvent("info", prev ? `coin switched ${prev} → ${mint}` : `coin set from COIN_MINT: ${mint}`);
+}
+
+// One-shot memory cleanup: bump MEMORY_RESET to any new value to wipe the
+// consolidated archive and drop notes that contradict a now-settled fact.
+if (process.env.MEMORY_RESET && state.notes._memory_reset !== process.env.MEMORY_RESET) {
+  const before = Object.keys(state.notes).length;
+  for (const [k, v] of Object.entries(state.notes)) {
+    if (/impostor|not launched|never launch|dry.?run|demo mode|fake|didn'?t launch/i.test(`${k} ${v}`)) delete state.notes[k];
+  }
+  state.notes._memory_reset = process.env.MEMORY_RESET;
+  resetMemorySummary();
+  save();
+  pushEvent("info", `memory reset: archive cleared, ${before - Object.keys(state.notes).length + 1} stale notes dropped`);
 }
 
 // A standing note from the operator, injected into the agent's memory. Set via

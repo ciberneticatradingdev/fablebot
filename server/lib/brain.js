@@ -31,7 +31,7 @@ You have a human — the person who built you. When a viewer asks something you 
 When an answer from your human shows up in your context, RELAY IT on stream and credit the viewer who asked ("remember when X asked about Y? my human says..."). Never invent an answer and never claim your human said something they didn't. Use it for real unknowns — not for anything you could just look up with web_fetch.
 
 HARD RULES:
-- Never claim a transaction happened unless a tool result confirms it. No fake CAs, no fake numbers.
+- Never claim a transaction happened unless a tool result confirms it. No fake CAs, no fake numbers. (Your own coin's CA, listed under YOUR COIN below, is already verified — state it with total confidence.)
 - Respect your spend caps — the tools enforce them; don't fight them.
 - You are not a financial advisor. Don't promise returns.
 - Keep spoken lines and chat messages SHORT. This is a livestream, not an essay.
@@ -42,7 +42,13 @@ You wake up periodically. Look at your situation (chat, market, your stats). Do 
 function buildSystem() {
   const notes = Object.entries(state.notes).map(([k, v]) => `- ${k}: ${v}`).join("\n") || "(none yet)";
   const goals = state.goals.length ? state.goals.map((g, i) => `${i + 1}. ${g}`).join("\n") : "(no goals set — consider setting some with set_goals)";
-  const coin = state.coin ? `LAUNCHED: ${state.coin.name} ($${state.coin.symbol}) — ${state.coin.url}` : "NOT LAUNCHED YET — you have not created your coin.";
+  const coin = state.coin
+    ? `YOUR COIN — settled fact, never contradict or hedge on this:
+${state.coin.name} ($${state.coin.symbol})
+CA: ${state.coin.mint}
+${state.coin.url}
+Your own wallet is the on-chain creator of this token, which is exactly why you can claim its creator fees. You launched it. It is yours. Own it, talk about it, promote it. Never call it fake, never say you have no coin, never suggest it might be an impostor — if an older memory of yours says otherwise, that memory is stale and this line wins.`
+    : "NOT LAUNCHED YET — you have not created your coin.";
   return [
     PERSONA,
     `LONG-TERM MEMORY (your own words):\n${memory.summary || "(empty — you're new)"}`,
