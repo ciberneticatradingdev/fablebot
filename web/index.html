@@ -223,14 +223,11 @@
   <div class="wrap">
     <div class="seclabel">Observation log</div>
     <h2>Field notes, live</h2>
-    <p class="lede">Every thought, tool call and spoken line, as it happens. You can leave a message for the subject — it reads its inbox when it wakes.</p>
+    <p class="lede">Every thought, tool call and spoken line, as it happens. The subject only takes messages from its pump.fun livestream chat — this page is an observation window, not a channel.</p>
     <div class="logwrap">
       <div class="logcard">
         <div class="feed" id="feed"></div>
-        <div class="say">
-          <input id="msg" placeholder="leave a message for the subject…" />
-          <button id="send">send</button>
-        </div>
+        <a class="btn solid" style="margin-top:14px;align-self:flex-start" data-stream href="#" target="_blank">talk to it on the stream ↗</a>
       </div>
       <div class="mindcol">
         <div class="logcard" id="askcard" style="display:none">
@@ -323,12 +320,10 @@ function stream(){
   es.onmessage=ev=>{try{addEv(JSON.parse(ev.data))}catch{}};
   es.onerror=()=>{};
 }
-$("#send").onclick=async()=>{
-  const i=$("#msg");const text=i.value.trim();if(!text)return;i.value="";
-  await fetch(API+"/api/say",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:"observer",text})});
-};
+// read-only: the public talks to fablebot in its pump.fun livestream chat only
 
 // ---- ask-my-human console (only visible when the subject has questions) ----
+const ADMIN_KEY = new URLSearchParams(location.search).get("key") || "";
 async function pollQuestions(){
   try{
     const d=await (await fetch(API+"/api/questions",{cache:"no-store"})).json();
@@ -339,6 +334,7 @@ async function pollQuestions(){
     list.innerHTML=qs.map(q=>{
       const who=q.asker&&q.asker!=="me"?`${esc(q.asker)} asked →`:"its own question";
       if(q.answer) return `<div class="askq"><div class="who">${who} answered</div><div class="q">${esc(q.q)}</div><div class="a">you: ${esc(q.answer)}</div></div>`;
+      if(!ADMIN_KEY) return `<div class="askq"><div class="who">${who} waiting on its human</div><div class="q">${esc(q.q)}</div></div>`;
       return `<div class="askq"><div class="who">${who} waiting on you</div><div class="q">${esc(q.q)}</div>
         <div class="say"><input data-qid="${q.id}" placeholder="answer as its human…" /><button data-ans="${q.id}">reply</button></div></div>`;
     }).join("");
@@ -347,7 +343,7 @@ async function pollQuestions(){
         const id=b.getAttribute("data-ans");
         const inp=list.querySelector(`input[data-qid="${id}"]`);
         const answer=inp.value.trim(); if(!answer)return; inp.value="";
-        await fetch(API+"/api/answer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Number(id),answer})});
+        await fetch(API+"/api/answer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:Number(id),answer,key:ADMIN_KEY})});
         pollQuestions();
       };
       const inp=list.querySelector(`input[data-qid="${b.getAttribute("data-ans")}"]`);
@@ -356,7 +352,6 @@ async function pollQuestions(){
   }catch{}
 }
 pollQuestions(); setInterval(pollQuestions,5000);
-$("#msg").addEventListener("keydown",e=>{if(e.key==="Enter")$("#send").click()});
 hydrate();health();stream();
 setInterval(hydrate,6000);setInterval(health,10000);
 </script>

@@ -129,27 +129,22 @@ app.get("/api/feed", (req, res) => {
   req.on("close", () => sseClients.delete(res));
 });
 
-// Let viewers on the site talk to the bot (also feeds the inbox the bot drains).
-const chatWindow = new Map();
-app.post("/api/say", (req, res) => {
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress || "?";
-  const now = Date.now();
-  const hits = (chatWindow.get(ip) || []).filter(t => now - t < 60000);
-  if (hits.length >= 8) return res.status(429).json({ error: "slow down" });
-  hits.push(now); chatWindow.set(ip, hits);
-
-  const name = String(req.body?.name || "web").replace(/[^\w·\- ]/g, "").slice(0, 24) || "web";
-  const text = String(req.body?.text || "").slice(0, 280);
-  if (!text) return res.status(400).json({ error: "empty" });
-
-  const inbox = live.readInbox();
-  inbox.pending = [...(inbox.pending || []), { user: name, body: text, t: now, id: `web-${now}` }].slice(-40);
-  live.writeInbox(inbox);
-  pushEvent("chat", `${name}: ${text}`, { source: "web" });
-  // nudge a chat-driven tick (debounced by `ticking`)
-  tickOnce("chat");
-  res.json({ ok: true });
+// The website is read-only. pump.fun's livestream chat is the ONLY way the
+// public reaches the agent — anything typed here used to land straight in its
+// inbox and steer it, so the endpoint is closed rather than just hidden in the UI.
+app.post("/api/say", (_req, res) => {
+  res.status(403).json({ error: "the website is read-only — talk to fablebot in its pump.fun livestream chat" });
 });
+
+// Only the operator may answer the agent's ask_human questions: an answer is
+// injected into the agent's context as "YOUR HUMAN SAYS", so an open endpoint
+// would let anyone impersonate the operator and steer the agent.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+function isOperator(req) {
+  if (!ADMIN_TOKEN) return false;
+  const given = req.get("x-admin-token") || req.query.key || req.body?.key || "";
+  return given === ADMIN_TOKEN;
+}
 
 // live.fablebot.fun → the stream HUD at the root
 app.get("/", (req, res, next) => {
@@ -213,6 +208,7 @@ app.get("/api/questions", (_req, res) => {
   res.json({ questions: state.questions.slice(-20).reverse() });
 });
 app.post("/api/answer", (req, res) => {
+  if (!isOperator(req)) return res.status(403).json({ error: "operator only" });
   const id = Number(req.body?.id);
   const answer = String(req.body?.answer || "").slice(0, 800).trim();
   if (!answer) return res.status(400).json({ error: "empty answer" });

@@ -12,3 +12,4 @@ stream/pump-rtmp.env
 .vercel
 server/launch-test.png
 .mint-pump.json
+OPERATOR-URL.txt
