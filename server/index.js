@@ -113,6 +113,12 @@ app.get("/api/state", async (_req, res) => {
     sol,
     solSpentToday: spentToday(),
     stream: live.streamStatus(),
+    tweets: {
+      leftToday: x.tweetsLeftToday(),
+      usedToday: state.tweetsToday.length,
+      // rolling 24h window: the budget frees up as old posts age out
+      nextFreesAt: state.tweetsToday.length ? Math.min(...state.tweetsToday) + 86400000 : null,
+    },
     enabled: ENABLED,
   });
 });
