@@ -192,6 +192,16 @@ function chatFromEvent(text) {
 // ---------- voice: browser TTS + caption + speaking animation ----------
 let audioOn = false;
 const btn = $("#audioBtn");
+// OBS reloads the browser source on scene changes and loses the click. It also
+// runs with autoplay allowed, so restore the previous choice and just play.
+try {
+  if (localStorage.getItem("fb_audio") === "1") {
+    audioOn = true;
+    btn.className = "audio on";
+    btn.textContent = "🔊 voice on";
+    player.play().catch(() => {});
+  }
+} catch {}
 // Real-audio TTS (works in OBS's embedded browser, which has NO speechSynthesis).
 // StreamElements returns an mp3 — no API key. speechSynthesis is only a fallback
 // for normal browsers if the audio fetch fails.
@@ -206,6 +216,7 @@ let playing = false;
 
 btn.onclick = () => {
   audioOn = !audioOn;
+  try { localStorage.setItem("fb_audio", audioOn ? "1" : "0"); } catch {}
   btn.className = "audio" + (audioOn ? " on" : "");
   btn.textContent = audioOn ? "🔊 voice on" : "🔇 enable voice";
   if (audioOn) { player.play().catch(() => {}); speak("voice on. now you can actually hear me."); }
@@ -226,27 +237,62 @@ function pickVoice() {
   } catch { return null; }
 }
 function fallbackSpeak(text) {
-  if (!("speechSynthesis" in window)) { view.setSpeaking(false); return; }
+  // OBS's embedded browser has no speechSynthesis — release the queue and move
+  // on. (Returning early here used to strand `playing = true` forever, which
+  // killed all audio in OBS after the first failed clip.)
+  if (!("speechSynthesis" in window)) { release(); return; }
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     const v = pickVoice(); if (v) u.voice = v;
     u.rate = 1.04; u.pitch = 0.95;
     u.onstart = () => view.setSpeaking(true);
-    u.onend = () => { view.setSpeaking(false); playing = false; next(); };
+    u.onend = release;
+    u.onerror = release;
     speechSynthesis.speak(u);
-  } catch { view.setSpeaking(false); playing = false; next(); }
+  } catch { release(); }
 }
+
+// Single place that unlocks the queue — every failure path must go through it,
+// or one bad clip silences the stream permanently.
+let watchdog = null;
+function release() {
+  clearTimeout(watchdog); watchdog = null;
+  playing = false;
+  view.setSpeaking(false);
+  next();
+}
+
 function next() {
   if (playing || !queue.length) return;
   const text = queue.shift();
   playing = true;
   view.setSpeaking(true);
+
+  let settled = false;
+  const finish = () => { if (settled) return; settled = true; release(); };
+  const retryOrFallback = () => {
+    if (settled) return;
+    if (!next._retried) {           // one retry: transient proxy/network blips
+      next._retried = true; settled = true;
+      clearTimeout(watchdog); playing = false;
+      queue.unshift(text); setTimeout(next, 1200);
+      return;
+    }
+    next._retried = false;
+    fallbackSpeakSafe(text, finish);
+  };
+  const fallbackSpeakSafe = (t, done) => { settled = true; clearTimeout(watchdog); playing = false; view.setSpeaking(false); fallbackSpeak(t); };
+
+  player.onended = () => { next._retried = false; finish(); };
+  player.onerror = retryOrFallback;
   player.src = ttsUrl(text);
-  const done = () => { playing = false; view.setSpeaking(false); next(); };
-  player.onended = done;
-  player.onerror = () => fallbackSpeak(text);
-  player.play().catch(() => fallbackSpeak(text));
+  player.play().then(() => { next._retried = false; }).catch(retryOrFallback);
+
+  // hard ceiling: nothing may hold the queue longer than this
+  clearTimeout(watchdog);
+  watchdog = setTimeout(() => { if (!settled) { settled = true; release(); } },
+    Math.min(30000, 8000 + text.length * 90));
 }
 function speak(text) {
   const est = Math.min(9000, Math.max(2400, text.length * 60));
